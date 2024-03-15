@@ -69,6 +69,10 @@
           </dict>
           <dict>
             <key>include</key>
+            <string>#keywords</string>
+          </dict>
+          <dict>
+            <key>include</key>
             <string>#paragraph</string>
           </dict>
         </array>
@@ -3684,6 +3688,19 @@
             <string>^(?!\s*$)</string>
           </dict>
         </array>
+      </dict>
+      <key>keywords</key>
+      <dict>
+        <key>match</key>
+        <string>(^|\G)(Keywords:)\s*(.+;)</string>
+        <key>captures</key>
+        <dict>
+          <key>3</key>
+          <dict>
+            <key>name</key>
+            <string>punctuation.definition.quote.begin.markdown</string>
+          </dict>
+        </dict>
       </dict>
       <key>link-def</key>
       <dict>

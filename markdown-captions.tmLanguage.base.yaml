@@ -16,6 +16,7 @@ repository:
     - {include: '#link-def'}
     - {include: '#html'}
     - {include: '#table'}
+    - {include: '#keywords'}
     - {include: '#paragraph'}
   blockquote:
     begin: (^|\G)[ ]{0,3}(>) ?
@@ -126,6 +127,10 @@ repository:
       patterns:
       - {include: text.html.derivative}
       while: ^(?!\s*$)
+  keywords:
+    match: (^|\G)(Keywords:)\s*(.+;)
+    captures:
+      '3': {name: punctuation.definition.quote.begin.markdown}
   link-def:
     captures:
       '1': {name: punctuation.definition.constant.markdown}

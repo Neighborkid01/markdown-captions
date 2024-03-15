@@ -1,4 +1,4 @@
-# markdown-captions README
+# markdown-captions
 
 This is an extension of the VS Code Markdown language so that I can generate
 caption sheets for photos and update metadata with a script while ensuring the
@@ -24,6 +24,15 @@ This extension contributes the following settings:
 
 * `myExtension.enable`: Enable/disable this extension.
 * `myExtension.thing`: Set to `blah` to do something.
+
+### Building
+
+To generate the main grammar:
+
+```console
+npm install
+npm run build
+```
 
 ## Known Issues
 
