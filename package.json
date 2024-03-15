@@ -1,0 +1,32 @@
+{
+  "name": "markdown-captions",
+  "displayName": "Markdown Captions",
+  "description": "Syntax highlighting for photo/video captions in Markdown",
+  "version": "0.0.1",
+  "scripts": {
+    "build": "node build"
+  },
+  "engines": {
+    "vscode": "^1.87.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [{
+      "id": "Markdown-Captions",
+      "aliases": ["Markdown Captions", "mdcaptions"],
+      "extensions": [".md",".mdc",".mdown",".markdown",".markdn"],
+      "configuration": "./language-configuration.json"
+    }],
+    "grammars": [{
+      "language": "Markdown-Captions",
+      "scopeName": "text.html.markdown.captions",
+      "path": "./syntaxes/markdown-captions.tmLanguage"
+    }]
+  },
+  "devDependencies": {
+    "js-yaml": "^3.13.1",
+    "plist": "^3.0.4"
+  }
+}
