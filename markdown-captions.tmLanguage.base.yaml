@@ -25,10 +25,10 @@ repository:
     patterns:
     - {include: '#block'}
     while: (^|\G)\s*(>) ?
-{{languageDefinitions}}
+##languageDefinitions##
   fenced_code_block:
     patterns:
-    {{languageIncludes}}
+    ##languageIncludes##
     - {include: '#fenced_code_block_unknown'}
   fenced_code_block_unknown:
     begin: (^|\G)(\s*)(`{3,}|~{3,})\s*(?=([^`]*)?$)
