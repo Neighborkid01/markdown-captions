@@ -17,6 +17,7 @@ repository:
     - {include: '#html'}
     - {include: '#table'}
     - {include: '#keywords'}
+    - {include: '#virin'}
     - {include: '#paragraph'}
   blockquote:
     begin: (^|\G)[ ]{0,3}(>) ?
@@ -234,6 +235,12 @@ repository:
         '1':
           patterns:
           - {include: '#inline'}
+  virin:
+    name: markup.heading.markdown
+    match: ^((\d{6}-(?:A|F|G|M|N|X)-[A-Z0-9]{5}-\d{4}))
+    captures:
+      '1': {name: heading.3.markdown}
+      '2': {name: punctuation.definition.heading.markdown}
   inline:
     patterns:
     - {include: '#ampersand'}

@@ -73,6 +73,10 @@
           </dict>
           <dict>
             <key>include</key>
+            <string>#virin</string>
+          </dict>
+          <dict>
+            <key>include</key>
             <string>#paragraph</string>
           </dict>
         </array>
@@ -4033,6 +4037,26 @@
             </dict>
           </dict>
         </array>
+      </dict>
+      <key>virin</key>
+      <dict>
+        <key>name</key>
+        <string>markup.heading.markdown</string>
+        <key>match</key>
+        <string>^((\d{6}-(?:A|F|G|M|N|X)-[A-Z0-9]{5}-\d{4}))</string>
+        <key>captures</key>
+        <dict>
+          <key>1</key>
+          <dict>
+            <key>name</key>
+            <string>heading.3.markdown</string>
+          </dict>
+          <key>2</key>
+          <dict>
+            <key>name</key>
+            <string>punctuation.definition.heading.markdown</string>
+          </dict>
+        </dict>
       </dict>
       <key>inline</key>
       <dict>
