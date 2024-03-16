@@ -3689,16 +3689,43 @@
           </dict>
         </array>
       </dict>
+      <key>keyword</key>
+      <dict>
+        <key>match</key>
+        <string>\s*(.+?;)\s*((.+?;)+)?</string>
+        <key>name</key>
+        <string>markup.quote.markdown</string>
+        <key>captures</key>
+        <dict>
+          <key>2</key>
+          <dict>
+            <key>patterns</key>
+            <array>
+              <dict>
+                <key>include</key>
+                <string>#keyword</string>
+              </dict>
+            </array>
+          </dict>
+        </dict>
+      </dict>
       <key>keywords</key>
       <dict>
         <key>match</key>
-        <string>(^|\G)(Keywords:)\s*(.+;)</string>
+        <string>(?:^|\G)Keywords:\s*((.+?;)+)</string>
         <key>captures</key>
         <dict>
-          <key>3</key>
+          <key>1</key>
           <dict>
             <key>name</key>
             <string>punctuation.definition.quote.begin.markdown</string>
+            <key>patterns</key>
+            <array>
+              <dict>
+                <key>include</key>
+                <string>#keyword</string>
+              </dict>
+            </array>
           </dict>
         </dict>
       </dict>

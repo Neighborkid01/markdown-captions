@@ -127,10 +127,17 @@ repository:
       patterns:
       - {include: text.html.derivative}
       while: ^(?!\s*$)
-  keywords:
-    match: (^|\G)(Keywords:)\s*(.+;)
+  keyword:
+    match: \s*(.+?;)\s*((.+?;)+)?
+    name: markup.quote.markdown
     captures:
-      '3': {name: punctuation.definition.quote.begin.markdown}
+      '2': {patterns: [ {include: '#keyword'} ] }
+  keywords:
+    match: (?:^|\G)Keywords:\s*((.+?;)+)
+    captures:
+      '1':
+        name: punctuation.definition.quote.begin.markdown
+        patterns: [ {include: '#keyword'} ]
   link-def:
     captures:
       '1': {name: punctuation.definition.constant.markdown}
