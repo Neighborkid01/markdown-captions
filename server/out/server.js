@@ -1,9 +1,5 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-/* --------------------------------------------------------------------------------------------
- * Copyright (c) Microsoft Corporation. All rights reserved.
- * Licensed under the MIT License. See License.txt in the project root for license information.
- * ------------------------------------------------------------------------------------------ */
 const node_1 = require("vscode-languageserver/node");
 const vscode_languageserver_textdocument_1 = require("vscode-languageserver-textdocument");
 // Create a connection for the server, using Node's IPC as a transport.
@@ -13,16 +9,12 @@ const connection = (0, node_1.createConnection)(node_1.ProposedFeatures.all);
 const documents = new node_1.TextDocuments(vscode_languageserver_textdocument_1.TextDocument);
 let hasConfigurationCapability = false;
 let hasWorkspaceFolderCapability = false;
-let hasDiagnosticRelatedInformationCapability = false;
 connection.onInitialize((params) => {
     const capabilities = params.capabilities;
     // Does the client support the `workspace/configuration` request?
     // If not, we fall back using global settings.
     hasConfigurationCapability = !!(capabilities.workspace && !!capabilities.workspace.configuration);
     hasWorkspaceFolderCapability = !!(capabilities.workspace && !!capabilities.workspace.workspaceFolders);
-    hasDiagnosticRelatedInformationCapability = !!(capabilities.textDocument &&
-        capabilities.textDocument.publishDiagnostics &&
-        capabilities.textDocument.publishDiagnostics.relatedInformation);
     const result = {
         capabilities: {
             textDocumentSync: node_1.TextDocumentSyncKind.Incremental,
@@ -136,7 +128,7 @@ async function validateTextDocument(textDocument) {
         if (keywordsCount <= 6) {
             continue;
         }
-        let message = `A maximum of 6 keywords is allowed. Found ${baseKeywords.length} base keywords and ${keywords.length} image-specific keywords.`;
+        let message = `A maximum of 6 keywords is allowed. Found ${baseKeywords.length} base keywords and ${keywords.length} image-specific keyword${keywords.length == 1 ? "" : "s"}.`;
         if (baseKeywords.length === keywordsCount) {
             message = `A maximum of 6 keywords is allowed. Found ${keywordsCount} keywords.`;
         }
@@ -150,17 +142,6 @@ async function validateTextDocument(textDocument) {
             message,
             source: 'ex'
         };
-        // if (hasDiagnosticRelatedInformationCapability) {
-        // 	diagnostic.relatedInformation = [
-        // 		{
-        // 			location: {
-        // 				uri: textDocument.uri,
-        // 				range: Object.assign({}, diagnostic.range)
-        // 			},
-        // 			message: 'Spelling matters'
-        // 		},
-        // 	];
-        // }
         diagnostics.push(diagnostic);
     }
     return diagnostics;
