@@ -100,18 +100,14 @@ connection.languages.diagnostics.on(async (params) => {
 documents.onDidChangeContent(change => {
     validateTextDocument(change.document);
 });
-async function validateTextDocument(textDocument) {
-    const settings = await getDocumentSettings(textDocument.uri);
-    // The validator creates diagnostics for all uppercase words length 2 and more
+function validateKeywords(existingProblems, settings, textDocument) {
     const text = textDocument.getText();
-    // const pattern = /\b[A-Z]{2,}\b/g;
     const pattern = /(Keywords: )(.+;)/gd;
-    let m;
+    let match;
     let baseKeywords = [];
-    let problems = 0;
     const diagnostics = [];
-    while ((m = pattern.exec(text)) && problems < settings.maxNumberOfProblems) {
-        let keywords = m[2].split(';').map(k => k.trim()).filter(k => k.length > 0);
+    while ((match = pattern.exec(text)) && existingProblems + diagnostics.length < settings.maxNumberOfProblems) {
+        let keywords = match[2].split(';').map(k => k.trim()).filter(k => k.length > 0);
         let keywordsCount = baseKeywords.length + keywords.length;
         if (baseKeywords.length === 0) {
             baseKeywords = keywords;
@@ -123,18 +119,23 @@ async function validateTextDocument(textDocument) {
         if (baseKeywords.length === keywordsCount) {
             message = `A maximum of 6 keywords is allowed. Found ${keywordsCount} keywords.`;
         }
-        problems += 1;
         const diagnostic = {
             severity: node_1.DiagnosticSeverity.Error,
             range: {
-                start: textDocument.positionAt(m.index + m[1].length),
-                end: textDocument.positionAt(m.index + m[0].length)
+                start: textDocument.positionAt(match.index + match[1].length),
+                end: textDocument.positionAt(match.index + match[0].length)
             },
             message,
             source: 'ex'
         };
         diagnostics.push(diagnostic);
     }
+    return diagnostics;
+}
+async function validateTextDocument(textDocument) {
+    const settings = await getDocumentSettings(textDocument.uri);
+    let diagnostics = [];
+    diagnostics = diagnostics.concat(validateKeywords(diagnostics.length, settings, textDocument));
     return diagnostics;
 }
 connection.onDidChangeWatchedFiles(_change => {
