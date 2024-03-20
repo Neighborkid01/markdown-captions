@@ -27,7 +27,7 @@ function activate(context) {
         }
     };
     // Create the language client and start the client.
-    client = new node_1.LanguageClient('languageServerExample', 'Language Server Example', serverOptions, clientOptions);
+    client = new node_1.LanguageClient('markdownCaptionsLanguageServer', 'Markdown Captions Language Server', serverOptions, clientOptions);
     // Start the client. This will also launch the server
     client.start();
 }

@@ -18,10 +18,6 @@ connection.onInitialize((params) => {
     const result = {
         capabilities: {
             textDocumentSync: node_1.TextDocumentSyncKind.Incremental,
-            // Tell the client that this server supports code completion.
-            completionProvider: {
-                resolveProvider: true
-            },
             diagnosticProvider: {
                 interFileDependencies: false,
                 workspaceDiagnostics: false
@@ -49,8 +45,6 @@ connection.onInitialized(() => {
     }
 });
 // The global settings, used when the `workspace/configuration` request is not supported by the client.
-// Please note that this is not the case when using this server with the client provided in this example
-// but could happen with other clients.
 const defaultSettings = { maxNumberOfProblems: 1000 };
 let globalSettings = defaultSettings;
 // Cache the settings of all open documents
@@ -61,11 +55,9 @@ connection.onDidChangeConfiguration(change => {
         documentSettings.clear();
     }
     else {
-        globalSettings = ((change.settings.languageServerExample || defaultSettings));
+        globalSettings = ((change.settings.markdownCaptionsLanguageServer || defaultSettings));
     }
     // Refresh the diagnostics since the `maxNumberOfProblems` could have changed.
-    // We could optimize things here and re-fetch the setting first can compare it
-    // to the existing setting, but this is out of scope for this example.
     connection.languages.diagnostics.refresh();
 });
 function getDocumentSettings(resource) {
@@ -76,7 +68,7 @@ function getDocumentSettings(resource) {
     if (!result) {
         result = connection.workspace.getConfiguration({
             scopeUri: resource,
-            section: 'languageServerExample'
+            section: 'markdownCaptionsLanguageServer'
         });
         documentSettings.set(resource, result);
     }
@@ -109,7 +101,6 @@ documents.onDidChangeContent(change => {
     validateTextDocument(change.document);
 });
 async function validateTextDocument(textDocument) {
-    // In this simple example we get the settings for every validate run.
     const settings = await getDocumentSettings(textDocument.uri);
     // The validator creates diagnostics for all uppercase words length 2 and more
     const text = textDocument.getText();
@@ -149,37 +140,6 @@ async function validateTextDocument(textDocument) {
 connection.onDidChangeWatchedFiles(_change => {
     // Monitored files have change in VSCode
     connection.console.log('We received a file change event');
-});
-// This handler provides the initial list of the completion items.
-connection.onCompletion((_textDocumentPosition) => {
-    // The pass parameter contains the position of the text document in
-    // which code complete got requested. For the example we ignore this
-    // info and always provide the same completion items.
-    return [
-        {
-            label: 'TypeScript',
-            kind: node_1.CompletionItemKind.Text,
-            data: 1
-        },
-        {
-            label: 'JavaScript',
-            kind: node_1.CompletionItemKind.Text,
-            data: 2
-        }
-    ];
-});
-// This handler resolves additional information for the item selected in
-// the completion list.
-connection.onCompletionResolve((item) => {
-    if (item.data === 1) {
-        item.detail = 'TypeScript details';
-        item.documentation = 'TypeScript documentation';
-    }
-    else if (item.data === 2) {
-        item.detail = 'JavaScript details';
-        item.documentation = 'JavaScript documentation';
-    }
-    return item;
 });
 // Make the text document manager listen on the connection
 // for open, change and close text document events
