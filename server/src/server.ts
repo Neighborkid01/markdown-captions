@@ -137,50 +137,6 @@ documents.onDidChangeContent(change => {
     validateTextDocument(change.document);
 });
 
-// function validateKeywords(
-//     existingProblems: number,
-//     settings: Settings,
-//     textDocument: TextDocument
-// ): Diagnostic[] {
-//     const text = textDocument.getText();
-//     const pattern = /(Keywords: )(.+;)/g;
-//     let match: RegExpExecArray | null;
-
-//     let baseKeywords = [];
-//     const diagnostics: Diagnostic[] = [];
-//     while (
-//         (match = pattern.exec(text)) &&
-//         existingProblems + diagnostics.length < settings.maxNumberOfProblems
-//     ) {
-//         let keywords = match[2]
-//             .split(';')
-//             .map(k => k.trim())
-//             .filter(k => k.length > 0);
-//         let keywordsCount = baseKeywords.length + keywords.length;
-
-//         if (baseKeywords.length === 0) { baseKeywords = keywords; }
-//         if (keywordsCount <= 6) { continue; }
-
-//         let message =
-//             `A maximum of 6 keywords is allowed. Found ${baseKeywords.length} base keywords and ${keywords.length} image-specific keyword${keywords.length == 1 ? "" : "s"}.`;
-//         if (baseKeywords.length === keywordsCount) {
-//             message = `A maximum of 6 keywords is allowed. Found ${keywordsCount} keywords.`;
-//         }
-
-//         const diagnostic: Diagnostic = {
-//             severity: DiagnosticSeverity.Error,
-//             range: {
-//                 start: textDocument.positionAt(match.index + match[1].length),
-//                 end: textDocument.positionAt(match.index + match[0].length)
-//             },
-//             message,
-//             source: 'Markdown Captions'
-//         };
-//         diagnostics.push(diagnostic);
-//     }
-//     return diagnostics;
-// }
-
 // function validateFilenamesMatchImageTitles(
 //     existingProblems: number,
 //     settings: Settings,
@@ -354,10 +310,7 @@ documents.onDidChangeContent(change => {
 // }
 
 type PositionAt = (offset: number) => Position;
-type Keywords = {
-    keywordString: string;
-    keywords?: string[];
-};
+type Keywords = string[];
 type Caption = {
     imageTag: string;
     title: string;
@@ -367,27 +320,118 @@ type Caption = {
 
 function validateHeadline(
     text: string,
-    previousNumberOfProblems: number,
+    diagnostics: Diagnostic[],
     maxNumberOfProblems: number,
-    positionAt: PositionAt
-): Diagnostic[] {
-    const diagnostics: Diagnostic[] = [];
+	priorTextLength: number,
+    positionAt: PositionAt,
+): string {
     const headlinePattern = /^(.+)(?<!\\)$/;
 
     const match = headlinePattern.exec(text);
-    if (match && previousNumberOfProblems +1 < maxNumberOfProblems) {
-        const diagnostic: Diagnostic = {
+    if (match && diagnostics.length < maxNumberOfProblems) {
+        diagnostics.push({
             severity: DiagnosticSeverity.Warning,
             range: {
-                start: positionAt(0),
-                end: positionAt(text.length)
+                start: positionAt(priorTextLength),
+                end: positionAt(priorTextLength + text.length)
             },
             message: 'The headline should end in a backslash for pandoc to render propper spacing.',
             source: 'Markdown Captions'
-        };
-        diagnostics.push(diagnostic);
+        });
     }
-    return diagnostics;
+    return text;
+}
+
+function validateByline(
+    text: string,
+    diagnostics: Diagnostic[],
+    maxNumberOfProblems: number,
+	priorTextLength: number,
+    positionAt: PositionAt,
+): string {
+    const bylinePattern = /^By (.+)/;
+    let match = bylinePattern.exec(text);
+    if (match) {
+		return text;
+	}
+
+	const blankLinePattern = /^\s*$/;
+	match = blankLinePattern.exec(text);
+	if (match) {
+		if (diagnostics.length < maxNumberOfProblems) {
+			diagnostics.push({
+				severity: DiagnosticSeverity.Warning,
+				range: {
+					start: positionAt(priorTextLength),
+					end: positionAt(priorTextLength + text.length)
+				},
+				message: 'Expected byline to immediately follow the headline.',
+				source: 'Markdown Captions'
+			});
+		}
+		return '';
+	}
+
+	if (diagnostics.length < maxNumberOfProblems) {
+		diagnostics.push({
+			severity: DiagnosticSeverity.Error,
+			range: {
+				start: positionAt(priorTextLength),
+				end: positionAt(priorTextLength + text.length)
+			},
+			message: `Expected byline, found "${text}".`,
+			source: 'Markdown Captions'
+		});
+	}
+    return text;
+}
+
+function validateBaseKeywords(
+    text: string,
+    diagnostics: Diagnostic[],
+    maxNumberOfProblems: number,
+	priorTextLength: number,
+    positionAt: PositionAt,
+): Keywords | null {
+	const blankLinePattern = /^\s*$/;
+	let match = blankLinePattern.exec(text);
+	if (match) { return null; }
+
+    const keywordsPattern = /(Keywords: )(.+;)/g;
+    match = keywordsPattern.exec(text);
+	if (!match) {
+		if (diagnostics.length < maxNumberOfProblems) {
+			diagnostics.push({
+				severity: DiagnosticSeverity.Error,
+				range: {
+					start: positionAt(priorTextLength),
+					end: positionAt(priorTextLength + text.length)
+				},
+				message: `Expected keywords, found "${text}".`,
+				source: 'Markdown Captions'
+			});
+		}
+		return null;
+	}
+
+	let keywords = match[2]
+		.split(';')
+		.map(k => k.trim())
+		.filter(k => k.length > 0);
+	if (keywords.length <= 6) {
+		return keywords;
+	}
+
+	diagnostics.push({
+		severity: DiagnosticSeverity.Error,
+		range: {
+			start: positionAt(priorTextLength + match[1].length),
+			end: positionAt(priorTextLength + match[0].length)
+		},
+		message: `A maximum of 6 keywords is allowed. Found ${keywords.length} keywords.`,
+		source: 'Markdown Captions'
+	});
+    return keywords;
 }
 
 async function validateTextDocument(textDocument: TextDocument): Promise<Diagnostic[]> {
@@ -397,42 +441,32 @@ async function validateTextDocument(textDocument: TextDocument): Promise<Diagnos
     let diagnostics: Diagnostic[] = [];
     const text = textDocument.getText();
     const lines = text.split('\n');
+	let priorTextLength = 0;
 
     const positionAt: PositionAt = offset => textDocument.positionAt(offset);
 
-    let headline: string;
-    let byLine: string;
-    let baseKeywords: Keywords;
+    let headline: string = '';
+    let byline: string = '';
+    let baseKeywords: Keywords | null = null;
     let captions: Caption[] = [];
 
-    let i = 0;
     for (let line of lines) {
-        if (i === 0) {
-            diagnostics = diagnostics.concat(validateHeadline(line, diagnostics.length, maxNumberOfProblems, positionAt));
-            headline = line;
-        // } else if (i === 1) {
-        //     byLine = line;
-        // } else if (i === 2) {
-        //     baseKeywords = { keywordString: line };
-        // } else if (i % 4 === 0) {
-        //     let imageTag = line;
-        //     let title = lines[i + 1];
-        //     let keywords = { keywordString: lines[i + 2] };
-        //     let description = lines[i + 3];
-        //     captions.push({ imageTag, title, keywords, description });
-        }
-        i++;
+        if (headline === '') {
+            headline = validateHeadline(line, diagnostics, maxNumberOfProblems, priorTextLength, positionAt);
+			priorTextLength += line.length + 1;
+			continue;
+		}
+		if (byline === '') {
+			byline = validateByline(line, diagnostics, maxNumberOfProblems, priorTextLength, positionAt);
+			priorTextLength += line.length + 1;
+			continue;
+		}
+		if (baseKeywords === null) {
+			baseKeywords = validateBaseKeywords(line, diagnostics, maxNumberOfProblems, priorTextLength, positionAt);
+			priorTextLength += line.length + 1;
+			continue;
+		}
     }
-    // diagnostics = diagnostics.concat(validateKeywords(diagnostics.length, settings, textDocument));
-    // diagnostics = diagnostics.concat(validateFilenamesMatchImageTitles(diagnostics.length, settings, textDocument));
-    // diagnostics = diagnostics.concat(validateFileHasCorrectSpacing(diagnostics.length, settings, textDocument));
-    // diagnostics = diagnostics.concat(validateFilenameDateMatchesCaptionDate(diagnostics.length, settings, textDocument));
-    // diagnostics = diagnostics.concat(validateCaptionDateIsFormattedCorrectly(diagnostics.length, settings, textDocument));
-    // diagnostics = diagnostics.concat(validateAbbreviationsArePunctuatedCorrectly(diagnostics.length, settings, textDocument));
-    // diagnostics = diagnostics.concat(validateAbbreviationOnlyUsedOnSecondRefference(diagnostics.length, settings, textDocument));
-    // diagnostics = diagnostics.concat(validateLinesThatShouldEndInBackslashesDo(diagnostics.length, settings, textDocument));
-    // diagnostics = diagnostics.concat(validateVIRINsAreValid(diagnostics.length, settings, textDocument));
-    // diagnostics = diagnostics.concat(validateUSStateNamesAreValid(diagnostics.length, settings, textDocument));
 
     return diagnostics;
 }
