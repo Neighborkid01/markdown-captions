@@ -36,7 +36,8 @@ connection.onInitialize((params: InitializeParams) => {
     // If not, we fall back using global settings.
     hasConfigurationCapability = !!capabilities?.workspace?.configuration;
     hasWorkspaceFolderCapability = !!capabilities?.workspace?.workspaceFolders;
-    hasDiagnosticRelatedInformationCapability = !!capabilities?.textDocument?.publishDiagnostics?.relatedInformation;
+    hasDiagnosticRelatedInformationCapability =
+		!!capabilities?.textDocument?.publishDiagnostics?.relatedInformation;
 
     const result: InitializeResult = {
         capabilities: {
@@ -323,6 +324,21 @@ class CaptionBuilder {
     keywords?: Keywords;
     title?: string;
     description?: string;
+
+	isEmpty(): boolean {
+		return !this.imageTag &&
+			!this.keywords &&
+			!this.title &&
+			!this.description;
+	}
+
+	firstMissingField(): string {
+		if (!this.imageTag) { return 'image tag'; }
+		if (!this.keywords) { return 'keywords'; }
+		if (!this.title) { return 'image title'; }
+		if (!this.description) { return 'description'; }
+		return '';
+	}
 
 	getImageTagFromLine(
 		text: string,
@@ -625,6 +641,23 @@ async function validateTextDocument(textDocument: TextDocument): Promise<Diagnos
 			captionBuilder = new CaptionBuilder();
 		}
     }
+
+	if (!captionBuilder.isEmpty()) {
+		let firstMissingField = captionBuilder.firstMissingField();
+		let isAre =
+			firstMissingField === 'description' ? 'is' : 'and all later fields are';
+		let message =
+			`Found incomplete caption. The ${firstMissingField} ${isAre} missing.`;
+		diagnostics.push({
+			severity: DiagnosticSeverity.Error,
+			range: {
+				start: positionAt(priorTextLength - lines[lines.length - 1].length - 1),
+				end: positionAt(priorTextLength)
+			},
+			message,
+			source: 'Markdown Captions'
+		});
+	}
 
 	// TODO: Validate captions
 
