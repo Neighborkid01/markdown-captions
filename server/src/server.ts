@@ -37,7 +37,7 @@ connection.onInitialize((params: InitializeParams) => {
     hasConfigurationCapability = !!capabilities?.workspace?.configuration;
     hasWorkspaceFolderCapability = !!capabilities?.workspace?.workspaceFolders;
     hasDiagnosticRelatedInformationCapability =
-		!!capabilities?.textDocument?.publishDiagnostics?.relatedInformation;
+        !!capabilities?.textDocument?.publishDiagnostics?.relatedInformation;
 
     const result: InitializeResult = {
         capabilities: {
@@ -313,181 +313,181 @@ documents.onDidChangeContent(change => {
 type PositionAt = (offset: number) => Position;
 type Keywords = string[];
 type Caption = {
-	imageTag: string;
-	keywords: Keywords;
-	title: string;
-	description: string;
+    imageTag: string;
+    keywords: Keywords;
+    title: string;
+    description: string;
 };
 class CaptionBuilder {
-	hasLeadingBlankLine: boolean = false;
+    hasLeadingBlankLine: boolean = false;
     imageTag?: string;
     keywords?: Keywords;
     title?: string;
     description?: string;
 
-	isEmpty(): boolean {
-		return !this.imageTag &&
-			!this.keywords &&
-			!this.title &&
-			!this.description;
-	}
+    isEmpty(): boolean {
+        return !this.imageTag &&
+            !this.keywords &&
+            !this.title &&
+            !this.description;
+    }
 
-	firstMissingField(): string {
-		if (!this.imageTag) { return 'image tag'; }
-		if (!this.keywords) { return 'keywords'; }
-		if (!this.title) { return 'image title'; }
-		if (!this.description) { return 'description'; }
-		return '';
-	}
+    firstMissingField(): string {
+        if (!this.imageTag) { return 'image tag'; }
+        if (!this.keywords) { return 'keywords'; }
+        if (!this.title) { return 'image title'; }
+        if (!this.description) { return 'description'; }
+        return '';
+    }
 
-	getImageTagFromLine(
-		text: string,
-		diagnostics: Diagnostic[],
-		maxNumberOfProblems: number,
-		priorTextLength: number,
-		positionAt: PositionAt,
-	): string | undefined {
-		const imageTagPattern = /^!\[\]\(\<.+>\)/g;
-		let match = imageTagPattern.exec(text);
-		if (match) { return text; }
+    getImageTagFromLine(
+        text: string,
+        diagnostics: Diagnostic[],
+        maxNumberOfProblems: number,
+        priorTextLength: number,
+        positionAt: PositionAt,
+    ): string | undefined {
+        const imageTagPattern = /^!\[\]\(\<.+>\)/g;
+        let match = imageTagPattern.exec(text);
+        if (match) { return text; }
 
-		if (diagnostics.length < maxNumberOfProblems) {
-			diagnostics.push({
-				severity: DiagnosticSeverity.Error,
-				range: {
-					start: positionAt(priorTextLength),
-					end: positionAt(priorTextLength + text.length)
-				},
-				message: `Expected image tag resembling "![](<path/to/image.jpg>)", found "${text}".`,
-				source: 'Markdown Captions'
-			});
-		}
-	}
+        if (diagnostics.length < maxNumberOfProblems) {
+            diagnostics.push({
+                severity: DiagnosticSeverity.Error,
+                range: {
+                    start: positionAt(priorTextLength),
+                    end: positionAt(priorTextLength + text.length)
+                },
+                message: `Expected image tag resembling "![](<path/to/image.jpg>)", found "${text}".`,
+                source: 'Markdown Captions'
+            });
+        }
+    }
 
-	getKeywordsFromLine(
-		text: string,
-		diagnostics: Diagnostic[],
-		maxNumberOfProblems: number,
-		priorTextLength: number,
-		positionAt: PositionAt,
-	): Keywords | undefined {
-		const keywordsPattern = /^(Keywords: )(.+;)/g;
-		let match = keywordsPattern.exec(text);
-		if (match) {
-			let keywords = match[2]
-				.split(';')
-				.map(k => k.trim())
-				.filter(k => k.length > 0);
-			return keywords;
-		}
+    getKeywordsFromLine(
+        text: string,
+        diagnostics: Diagnostic[],
+        maxNumberOfProblems: number,
+        priorTextLength: number,
+        positionAt: PositionAt,
+    ): Keywords | undefined {
+        const keywordsPattern = /^(Keywords: )(.+;)/g;
+        let match = keywordsPattern.exec(text);
+        if (match) {
+            let keywords = match[2]
+                .split(';')
+                .map(k => k.trim())
+                .filter(k => k.length > 0);
+            return keywords;
+        }
 
-		if (diagnostics.length < maxNumberOfProblems) {
-			diagnostics.push({
-				severity: DiagnosticSeverity.Error,
-				range: {
-					start: positionAt(priorTextLength),
-					end: positionAt(priorTextLength + text.length)
-				},
-				message: `Expected line resembling "Keywords: Some; keywords;", found "${text}".`,
-				source: 'Markdown Captions'
-			});
-		}
-	}
+        if (diagnostics.length < maxNumberOfProblems) {
+            diagnostics.push({
+                severity: DiagnosticSeverity.Error,
+                range: {
+                    start: positionAt(priorTextLength),
+                    end: positionAt(priorTextLength + text.length)
+                },
+                message: `Expected line resembling "Keywords: Some; keywords;", found "${text}".`,
+                source: 'Markdown Captions'
+            });
+        }
+    }
 
-	getTitleFromLine(
-		text: string,
-		diagnostics: Diagnostic[],
-		maxNumberOfProblems: number,
-		priorTextLength: number,
-		positionAt: PositionAt,
-	): string | undefined {
-		const titlePattern = /^\d+-.+-\d+/g;
-		let match = titlePattern.exec(text);
-		if (match) { return text; }
+    getTitleFromLine(
+        text: string,
+        diagnostics: Diagnostic[],
+        maxNumberOfProblems: number,
+        priorTextLength: number,
+        positionAt: PositionAt,
+    ): string | undefined {
+        const titlePattern = /^\d+-.+-\d+/g;
+        let match = titlePattern.exec(text);
+        if (match) { return text; }
 
-		if (diagnostics.length < maxNumberOfProblems) {
-			diagnostics.push({
-				severity: DiagnosticSeverity.Error,
-				range: {
-					start: positionAt(priorTextLength),
-					end: positionAt(priorTextLength + text.length)
-				},
-				message: `Expected image title resembling "yymmdd-A-AB123-0000", found "${text}".`,
-				source: 'Markdown Captions'
-			});
-		}
-	}
+        if (diagnostics.length < maxNumberOfProblems) {
+            diagnostics.push({
+                severity: DiagnosticSeverity.Error,
+                range: {
+                    start: positionAt(priorTextLength),
+                    end: positionAt(priorTextLength + text.length)
+                },
+                message: `Expected image title resembling "yymmdd-A-AB123-0000", found "${text}".`,
+                source: 'Markdown Captions'
+            });
+        }
+    }
 
-	getFieldFromLine(
-		text: string,
-		diagnostics: Diagnostic[],
-		maxNumberOfProblems: number,
-		priorTextLength: number,
-		positionAt: PositionAt,
-	) {
-		const blankLinePattern = /^\s*$/;
-		let match = blankLinePattern.exec(text);
-		if (match) {
-			this.hasLeadingBlankLine = true;
-			return;
-		}
+    getFieldFromLine(
+        text: string,
+        diagnostics: Diagnostic[],
+        maxNumberOfProblems: number,
+        priorTextLength: number,
+        positionAt: PositionAt,
+    ) {
+        const blankLinePattern = /^\s*$/;
+        let match = blankLinePattern.exec(text);
+        if (match) {
+            this.hasLeadingBlankLine = true;
+            return;
+        }
 
-		if (!this.hasLeadingBlankLine) {
-			this.hasLeadingBlankLine = true;
-			if (diagnostics.length < maxNumberOfProblems) {
-				diagnostics.push({
-					severity: DiagnosticSeverity.Warning,
-					range: {
-						start: positionAt(priorTextLength),
-						end: positionAt(priorTextLength + text.length)
-					},
-					message: 'There should be at least one blank line between captions.',
-					source: 'Markdown Captions'
-				});
-			}
-		}
-		if (!this.imageTag) {
-			this.imageTag = this.getImageTagFromLine(text, diagnostics, maxNumberOfProblems, priorTextLength, positionAt);
-			return;
-		}
-		if (!this.keywords) {
-			this.keywords = this.getKeywordsFromLine(text, diagnostics, maxNumberOfProblems, priorTextLength, positionAt);
-			return;
-		}
-		if (!this.title) {
-			this.title = this.getTitleFromLine(text, diagnostics, maxNumberOfProblems, priorTextLength, positionAt);
-			return;
-		}
-		if (!this.description) {
-			this.description = text;
-			return;
-		}
-	}
+        if (!this.hasLeadingBlankLine) {
+            this.hasLeadingBlankLine = true;
+            if (diagnostics.length < maxNumberOfProblems) {
+                diagnostics.push({
+                    severity: DiagnosticSeverity.Warning,
+                    range: {
+                        start: positionAt(priorTextLength),
+                        end: positionAt(priorTextLength + text.length)
+                    },
+                    message: 'There should be at least one blank line between captions.',
+                    source: 'Markdown Captions'
+                });
+            }
+        }
+        if (!this.imageTag) {
+            this.imageTag = this.getImageTagFromLine(text, diagnostics, maxNumberOfProblems, priorTextLength, positionAt);
+            return;
+        }
+        if (!this.keywords) {
+            this.keywords = this.getKeywordsFromLine(text, diagnostics, maxNumberOfProblems, priorTextLength, positionAt);
+            return;
+        }
+        if (!this.title) {
+            this.title = this.getTitleFromLine(text, diagnostics, maxNumberOfProblems, priorTextLength, positionAt);
+            return;
+        }
+        if (!this.description) {
+            this.description = text;
+            return;
+        }
+    }
 
-	build(): Caption | null {
-		if (
-			!this.imageTag ||
-			!this.keywords ||
-			!this.title ||
-			!this.description
-		) {
-			return null;
-		}
+    build(): Caption | null {
+        if (
+            !this.imageTag ||
+            !this.keywords ||
+            !this.title ||
+            !this.description
+        ) {
+            return null;
+        }
 
-		return {
-			imageTag: this.imageTag,
-			keywords: this.keywords,
-			title: this.title,
-			description: this.description,
-		};
-	}
+        return {
+            imageTag: this.imageTag,
+            keywords: this.keywords,
+            title: this.title,
+            description: this.description,
+        };
+    }
 }
 
 function validateHeadline(
     text: string,
     diagnostics: Diagnostic[],
     maxNumberOfProblems: number,
-	priorTextLength: number,
+    priorTextLength: number,
     positionAt: PositionAt,
 ): string {
     const headlinePattern = /^(.+)(?<!\\)$/;
@@ -511,43 +511,43 @@ function validateByline(
     text: string,
     diagnostics: Diagnostic[],
     maxNumberOfProblems: number,
-	priorTextLength: number,
+    priorTextLength: number,
     positionAt: PositionAt,
 ): string {
     const bylinePattern = /^By (.+)/;
     let match = bylinePattern.exec(text);
     if (match) {
-		return text;
-	}
+        return text;
+    }
 
-	const blankLinePattern = /^\s*$/;
-	match = blankLinePattern.exec(text);
-	if (match) {
-		if (diagnostics.length < maxNumberOfProblems) {
-			diagnostics.push({
-				severity: DiagnosticSeverity.Warning,
-				range: {
-					start: positionAt(priorTextLength),
-					end: positionAt(priorTextLength + text.length)
-				},
-				message: 'Expected byline to immediately follow the headline.',
-				source: 'Markdown Captions'
-			});
-		}
-		return '';
-	}
+    const blankLinePattern = /^\s*$/;
+    match = blankLinePattern.exec(text);
+    if (match) {
+        if (diagnostics.length < maxNumberOfProblems) {
+            diagnostics.push({
+                severity: DiagnosticSeverity.Warning,
+                range: {
+                    start: positionAt(priorTextLength),
+                    end: positionAt(priorTextLength + text.length)
+                },
+                message: 'Expected byline to immediately follow the headline.',
+                source: 'Markdown Captions'
+            });
+        }
+        return '';
+    }
 
-	if (diagnostics.length < maxNumberOfProblems) {
-		diagnostics.push({
-			severity: DiagnosticSeverity.Error,
-			range: {
-				start: positionAt(priorTextLength),
-				end: positionAt(priorTextLength + text.length)
-			},
-			message: `Expected byline, found "${text}".`,
-			source: 'Markdown Captions'
-		});
-	}
+    if (diagnostics.length < maxNumberOfProblems) {
+        diagnostics.push({
+            severity: DiagnosticSeverity.Error,
+            range: {
+                start: positionAt(priorTextLength),
+                end: positionAt(priorTextLength + text.length)
+            },
+            message: `Expected byline, found "${text}".`,
+            source: 'Markdown Captions'
+        });
+    }
     return text;
 }
 
@@ -555,47 +555,47 @@ function validateBaseKeywords(
     text: string,
     diagnostics: Diagnostic[],
     maxNumberOfProblems: number,
-	priorTextLength: number,
+    priorTextLength: number,
     positionAt: PositionAt,
 ): Keywords | null {
-	const blankLinePattern = /^\s*$/;
-	let match = blankLinePattern.exec(text);
-	if (match) { return null; }
+    const blankLinePattern = /^\s*$/;
+    let match = blankLinePattern.exec(text);
+    if (match) { return null; }
 
     const keywordsPattern = /(Keywords: )(.+;)/g;
     match = keywordsPattern.exec(text);
-	if (!match) {
-		if (diagnostics.length < maxNumberOfProblems) {
-			diagnostics.push({
-				severity: DiagnosticSeverity.Error,
-				range: {
-					start: positionAt(priorTextLength),
-					end: positionAt(priorTextLength + text.length)
-				},
-				message: `Expected keywords, found "${text}".`,
-				source: 'Markdown Captions'
-			});
-		}
-		return null;
-	}
+    if (!match) {
+        if (diagnostics.length < maxNumberOfProblems) {
+            diagnostics.push({
+                severity: DiagnosticSeverity.Error,
+                range: {
+                    start: positionAt(priorTextLength),
+                    end: positionAt(priorTextLength + text.length)
+                },
+                message: `Expected keywords, found "${text}".`,
+                source: 'Markdown Captions'
+            });
+        }
+        return null;
+    }
 
-	let keywords = match[2]
-		.split(';')
-		.map(k => k.trim())
-		.filter(k => k.length > 0);
-	if (keywords.length <= 6) {
-		return keywords;
-	}
+    let keywords = match[2]
+        .split(';')
+        .map(k => k.trim())
+        .filter(k => k.length > 0);
+    if (keywords.length <= 6) {
+        return keywords;
+    }
 
-	diagnostics.push({
-		severity: DiagnosticSeverity.Error,
-		range: {
-			start: positionAt(priorTextLength + match[1].length),
-			end: positionAt(priorTextLength + match[0].length)
-		},
-		message: `A maximum of 6 keywords is allowed. Found ${keywords.length} keywords.`,
-		source: 'Markdown Captions'
-	});
+    diagnostics.push({
+        severity: DiagnosticSeverity.Error,
+        range: {
+            start: positionAt(priorTextLength + match[1].length),
+            end: positionAt(priorTextLength + match[0].length)
+        },
+        message: `A maximum of 6 keywords is allowed. Found ${keywords.length} keywords.`,
+        source: 'Markdown Captions'
+    });
     return keywords;
 }
 
@@ -606,60 +606,60 @@ async function validateTextDocument(textDocument: TextDocument): Promise<Diagnos
     let diagnostics: Diagnostic[] = [];
     const text = textDocument.getText();
     const lines = text.split('\n');
-	let priorTextLength = 0;
+    let priorTextLength = 0;
 
     const positionAt: PositionAt = offset => textDocument.positionAt(offset);
 
     let headline: string = '';
     let byline: string = '';
     let baseKeywords: Keywords | null = null;
-	let captionBuilder = new CaptionBuilder();
-	let caption: Caption | null = null;
+    let captionBuilder = new CaptionBuilder();
+    let caption: Caption | null = null;
     let captions: Caption[] = [];
 
     for (let line of lines) {
         if (headline === '') {
             headline = validateHeadline(line, diagnostics, maxNumberOfProblems, priorTextLength, positionAt);
-			priorTextLength += line.length + 1;
-			continue;
-		}
-		if (byline === '') {
-			byline = validateByline(line, diagnostics, maxNumberOfProblems, priorTextLength, positionAt);
-			priorTextLength += line.length + 1;
-			continue;
-		}
-		if (baseKeywords === null) {
-			baseKeywords = validateBaseKeywords(line, diagnostics, maxNumberOfProblems, priorTextLength, positionAt);
-			priorTextLength += line.length + 1;
-			continue;
-		}
-		captionBuilder.getFieldFromLine(line, diagnostics, maxNumberOfProblems, priorTextLength, positionAt);
-		priorTextLength += line.length + 1;
-		caption = captionBuilder.build();
-		if (caption) {
-			captions.push(caption);
-			captionBuilder = new CaptionBuilder();
-		}
+            priorTextLength += line.length + 1;
+            continue;
+        }
+        if (byline === '') {
+            byline = validateByline(line, diagnostics, maxNumberOfProblems, priorTextLength, positionAt);
+            priorTextLength += line.length + 1;
+            continue;
+        }
+        if (baseKeywords === null) {
+            baseKeywords = validateBaseKeywords(line, diagnostics, maxNumberOfProblems, priorTextLength, positionAt);
+            priorTextLength += line.length + 1;
+            continue;
+        }
+        captionBuilder.getFieldFromLine(line, diagnostics, maxNumberOfProblems, priorTextLength, positionAt);
+        priorTextLength += line.length + 1;
+        caption = captionBuilder.build();
+        if (caption) {
+            captions.push(caption);
+            captionBuilder = new CaptionBuilder();
+        }
     }
 
-	if (!captionBuilder.isEmpty()) {
-		let firstMissingField = captionBuilder.firstMissingField();
-		let isAre =
-			firstMissingField === 'description' ? 'is' : 'and all later fields are';
-		let message =
-			`Found incomplete caption. The ${firstMissingField} ${isAre} missing.`;
-		diagnostics.push({
-			severity: DiagnosticSeverity.Error,
-			range: {
-				start: positionAt(priorTextLength - lines[lines.length - 1].length - 1),
-				end: positionAt(priorTextLength)
-			},
-			message,
-			source: 'Markdown Captions'
-		});
-	}
+    if (!captionBuilder.isEmpty()) {
+        let firstMissingField = captionBuilder.firstMissingField();
+        let isAre =
+            firstMissingField === 'description' ? 'is' : 'and all later fields are';
+        let message =
+            `Found incomplete caption. The ${firstMissingField} ${isAre} missing.`;
+        diagnostics.push({
+            severity: DiagnosticSeverity.Error,
+            range: {
+                start: positionAt(priorTextLength - lines[lines.length - 1].length - 1),
+                end: positionAt(priorTextLength)
+            },
+            message,
+            source: 'Markdown Captions'
+        });
+    }
 
-	// TODO: Validate captions
+    // TODO: Validate captions
 
     return diagnostics;
 }
