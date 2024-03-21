@@ -312,10 +312,159 @@ documents.onDidChangeContent(change => {
 type PositionAt = (offset: number) => Position;
 type Keywords = string[];
 type Caption = {
-    imageTag: string;
-    title: string;
-    keywords: Keywords;
-    description: string;
+	imageTag: string;
+	keywords: Keywords;
+	title: string;
+	description: string;
+};
+class CaptionBuilder {
+	hasLeadingBlankLine: boolean = false;
+    imageTag?: string;
+    keywords?: Keywords;
+    title?: string;
+    description?: string;
+
+	getImageTagFromLine(
+		text: string,
+		diagnostics: Diagnostic[],
+		maxNumberOfProblems: number,
+		priorTextLength: number,
+		positionAt: PositionAt,
+	): string | undefined {
+		const imageTagPattern = /^!\[\]\(\<.+>\)/g;
+		let match = imageTagPattern.exec(text);
+		if (match) { return text; }
+
+		if (diagnostics.length < maxNumberOfProblems) {
+			diagnostics.push({
+				severity: DiagnosticSeverity.Error,
+				range: {
+					start: positionAt(priorTextLength),
+					end: positionAt(priorTextLength + text.length)
+				},
+				message: `Expected image tag resembling "![](<path/to/image.jpg>)", found "${text}".`,
+				source: 'Markdown Captions'
+			});
+		}
+	}
+
+	getKeywordsFromLine(
+		text: string,
+		diagnostics: Diagnostic[],
+		maxNumberOfProblems: number,
+		priorTextLength: number,
+		positionAt: PositionAt,
+	): Keywords | undefined {
+		const keywordsPattern = /^(Keywords: )(.+;)/g;
+		let match = keywordsPattern.exec(text);
+		if (match) {
+			let keywords = match[2]
+				.split(';')
+				.map(k => k.trim())
+				.filter(k => k.length > 0);
+			return keywords;
+		}
+
+		if (diagnostics.length < maxNumberOfProblems) {
+			diagnostics.push({
+				severity: DiagnosticSeverity.Error,
+				range: {
+					start: positionAt(priorTextLength),
+					end: positionAt(priorTextLength + text.length)
+				},
+				message: `Expected line resembling "Keywords: Some; keywords;", found "${text}".`,
+				source: 'Markdown Captions'
+			});
+		}
+	}
+
+	getTitleFromLine(
+		text: string,
+		diagnostics: Diagnostic[],
+		maxNumberOfProblems: number,
+		priorTextLength: number,
+		positionAt: PositionAt,
+	): string | undefined {
+		const titlePattern = /^\d+-.+-\d+/g;
+		let match = titlePattern.exec(text);
+		if (match) { return text; }
+
+		if (diagnostics.length < maxNumberOfProblems) {
+			diagnostics.push({
+				severity: DiagnosticSeverity.Error,
+				range: {
+					start: positionAt(priorTextLength),
+					end: positionAt(priorTextLength + text.length)
+				},
+				message: `Expected image title resembling "yymmdd-A-AB123-0000", found "${text}".`,
+				source: 'Markdown Captions'
+			});
+		}
+	}
+
+	getFieldFromLine(
+		text: string,
+		diagnostics: Diagnostic[],
+		maxNumberOfProblems: number,
+		priorTextLength: number,
+		positionAt: PositionAt,
+	) {
+		const blankLinePattern = /^\s*$/;
+		let match = blankLinePattern.exec(text);
+		if (match) {
+			this.hasLeadingBlankLine = true;
+			return;
+		}
+
+		if (!this.hasLeadingBlankLine) {
+			this.hasLeadingBlankLine = true;
+			if (diagnostics.length < maxNumberOfProblems) {
+				diagnostics.push({
+					severity: DiagnosticSeverity.Warning,
+					range: {
+						start: positionAt(priorTextLength),
+						end: positionAt(priorTextLength + text.length)
+					},
+					message: 'There should be at least one blank line between captions.',
+					source: 'Markdown Captions'
+				});
+			}
+		}
+		if (!this.imageTag) {
+			this.imageTag = this.getImageTagFromLine(text, diagnostics, maxNumberOfProblems, priorTextLength, positionAt);
+			return;
+		}
+		if (!this.keywords) {
+			this.keywords = this.getKeywordsFromLine(text, diagnostics, maxNumberOfProblems, priorTextLength, positionAt);
+			return;
+		}
+		if (!this.title) {
+			this.title = this.getTitleFromLine(text, diagnostics, maxNumberOfProblems, priorTextLength, positionAt);
+			return;
+		}
+		if (!this.description) {
+			this.description = text;
+			return;
+		}
+	}
+
+	build(): Caption | null {
+		if (
+			!this.imageTag ||
+			!this.keywords ||
+			!this.title ||
+			!this.description
+		) {
+			return null;
+		}
+
+		return {
+			imageTag: this.imageTag,
+			keywords: this.keywords,
+			title: this.title,
+			description: this.description,
+		};
+	}
 }
 
 function validateHeadline(
@@ -448,6 +597,8 @@ async function validateTextDocument(textDocument: TextDocument): Promise<Diagnos
     let headline: string = '';
     let byline: string = '';
     let baseKeywords: Keywords | null = null;
+	let captionBuilder = new CaptionBuilder();
+	let caption: Caption | null = null;
     let captions: Caption[] = [];
 
     for (let line of lines) {
@@ -466,7 +617,16 @@ async function validateTextDocument(textDocument: TextDocument): Promise<Diagnos
 			priorTextLength += line.length + 1;
 			continue;
 		}
+		captionBuilder.getFieldFromLine(line, diagnostics, maxNumberOfProblems, priorTextLength, positionAt);
+		priorTextLength += line.length + 1;
+		caption = captionBuilder.build();
+		if (caption) {
+			captions.push(caption);
+			captionBuilder = new CaptionBuilder();
+		}
     }
+
+	// TODO: Validate captions
 
     return diagnostics;
 }
