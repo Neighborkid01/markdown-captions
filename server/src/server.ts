@@ -138,14 +138,6 @@ documents.onDidChangeContent(change => {
     validateTextDocument(change.document);
 });
 
-// function validateFileHasCorrectSpacing(
-//     existingProblems: number,
-//     settings: Settings,
-//     textDocument: TextDocument
-// ): Diagnostic[] {
-//     return [];
-// }
-
 // function validateFilenameDateMatchesCaptionDate(
 //     existingProblems: number,
 //     settings: Settings,
@@ -465,15 +457,32 @@ class Caption {
         positionAt: PositionAt,
     ) {
         if (diagnostics.length >= maxNumberOfProblems) { return; }
+        let indexOfMatch: number;
 
         const correctFilenamePattern =
             /^(!\[\]\(\<.+\/)(\d{6}-(?:A|F|G|M|N|X)-[A-Z0-9]{5}-\d{4})(\.jpg|\.mp4)\>\)\s*$/g;
         let match = correctFilenamePattern.exec(this.imageTag);
         if (match) { return; }
 
+        const extraCrapOnTheEndPattern =
+            /^(!\[\]\(\<.+\/)(\d{6}-(?:A|F|G|M|N|X)-[A-Z0-9]{5}-\d{4})(\.jpg|\.mp4)(\>\)\s*)(.+)$/g;
+        match = extraCrapOnTheEndPattern.exec(this.imageTag);
+        if (match) {
+            indexOfMatch = this.fullText.indexOf(`${match[4]}${match[5]}`);
+            diagnostics.push({
+                severity: DiagnosticSeverity.Error,
+                range: {
+                    start: positionAt(this.index + indexOfMatch + match[4].length),
+                    end: positionAt(this.index + indexOfMatch + match[4].length + match[5].length)
+                },
+                message: `Found unexpected characters after image title "${match[5]}".`,
+                source: 'Markdown Captions'
+            });
+            return;
+        }
+
         const incorrectExtensionPattern =
-            /^(!\[\]\(\<.+\/)(\d{6}-(?:A|F|G|M|N|X)-[A-Z0-9]{5}-\d{4})(.+)\>\)/g;
-        let indexOfMatch: number;
+            /^(!\[\]\(\<.+\/)(\d{6}-(?:A|F|G|M|N|X)-[A-Z0-9]{5}-\d{4})(.+)\>\)\s*$/g;
         match = incorrectExtensionPattern.exec(this.imageTag);
         if (match) {
             indexOfMatch = this.fullText.indexOf(match[3]);
@@ -489,7 +498,7 @@ class Caption {
             return;
         }
 
-        const incorrectFilenamePattern = /^(!\[\]\(\<.+\/)(.+)(\..+)\>\)/g;
+        const incorrectFilenamePattern = /^(!\[\]\(\<.+\/)(.+)(\..+)\>\)\s*$/g;
         match = incorrectFilenamePattern.exec(this.imageTag);
         if (match) {
             indexOfMatch = this.fullText.indexOf(match[2]);
@@ -551,6 +560,7 @@ class Caption {
         positionAt: PositionAt,
     ) {
         if (diagnostics.length >= maxNumberOfProblems) { return; }
+        let indexOfMatch: number;
 
         const titlePattern = /^(\d{6}-(?:A|F|G|M|N|X)-[A-Z0-9]{5}-\d{4})\\\s*$/g;
         let match = titlePattern.exec(this.title);
@@ -558,7 +568,6 @@ class Caption {
 
         const missingBackslashPattern = /^(\d{6}-(?:A|F|G|M|N|X)-[A-Z0-9]{5}-\d{4})((?<!\\)\s*)$/g;
         match = missingBackslashPattern.exec(this.title);
-        let indexOfMatch: number;
         if (match) {
             indexOfMatch = this.fullText.indexOf(`\n${match[1]}${match[2]}`) + match[1].length + 1;
             diagnostics.push({
@@ -589,14 +598,16 @@ class Caption {
         diagnostics: Diagnostic[],
         maxNumberOfProblems: number,
         positionAt: PositionAt,
-        ) {
+    ) {
+        if (diagnostics.length >= maxNumberOfProblems) { return; }
+        let indexOfMatch: number;
+
         const filenamePattern =
             /^(!\[\]\(\<.+\/)(\d{6}-(?:A|F|G|M|N|X)-[A-Z0-9]{5}-\d{4})(\.jpg|\.mp4)\>\)\s*$/g;
         const titlePattern = /^(\d{6}-(?:A|F|G|M|N|X)-[A-Z0-9]{5}-\d{4})\\\s*$/g;
         const filenameMatch = filenamePattern.exec(this.imageTag);
         const titleMatch = titlePattern.exec(this.title);
 
-        let indexOfMatch: number;
         if (!filenameMatch) {
             indexOfMatch = this.fullText.indexOf(this.imageTag);
             diagnostics.push({
@@ -630,28 +641,24 @@ class Caption {
 
         const indexOfFilenameMatch = this.fullText.indexOf(filename);
         const indexOfTitleMatch = this.fullText.indexOf(title);
-        const filenameRange = {
-            start: positionAt(this.index + indexOfFilenameMatch),
-            end: positionAt(this.index + indexOfFilenameMatch + filename.length)
-        };
-        const filenameDiagnostic: Diagnostic = {
+        diagnostics.push({
             severity: DiagnosticSeverity.Warning,
-            range: filenameRange,
+            range: {
+                start: positionAt(this.index + indexOfFilenameMatch),
+                end: positionAt(this.index + indexOfFilenameMatch + filename.length)
+            },
             message: `This filename does not match the title of this image.\nFilename: ${filename}\nTitle:    ${title}`,
             source: 'Markdown Captions'
-        };
-        const titleRange = {
-            start: positionAt(this.index + indexOfTitleMatch),
-            end: positionAt(this.index + indexOfTitleMatch + title.length)
-        };
-        const titleDiagnostic: Diagnostic = {
+        });
+        diagnostics.push({
             severity: DiagnosticSeverity.Warning,
-            range: titleRange,
+            range: {
+                start: positionAt(this.index + indexOfTitleMatch),
+                end: positionAt(this.index + indexOfTitleMatch + title.length)
+            },
             message: `This image title does not match the filename.\nFilename: ${filename}\nTitle:    ${title}`,
             source: 'Markdown Captions'
-        };
-        diagnostics.push(filenameDiagnostic);
-        diagnostics.push(titleDiagnostic);
+        });
     }
 
     validate(
