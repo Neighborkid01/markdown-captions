@@ -138,55 +138,6 @@ documents.onDidChangeContent(change => {
     validateTextDocument(change.document);
 });
 
-// function validateFilenameDateMatchesCaptionDate(
-//     existingProblems: number,
-//     settings: Settings,
-//     textDocument: TextDocument
-// ): Diagnostic[] {
-//     const text = textDocument.getText();
-//     const pattern = /(\d{6}-(?:A|F|G|M|N|X)-[A-Z0-9]{5}-\d{4})(\\\n)(.+)\\/g;
-//     const titleDatePattern = /(\d{6})/i;
-//     const captionDatePattern = /(.+)((?:January|Jan|February|Feb|March|Mar|April|Apr|May|June|Jun|July|Jul|August|Aug|September|Sep|October|Oct|November|Nov|December|Dec).?\s+\d{1,2}(?:st|nd|rd|th)?,?\s\d{2,4})/i;
-//     let match: RegExpExecArray | null;
-
-//     const diagnostics: Diagnostic[] = [];
-//     while (
-//         (match = pattern.exec(text)) &&
-//         existingProblems + diagnostics.length < settings.maxNumberOfProblems
-//     ) {
-//         let title = match[1];
-//         let caption = match[3];
-
-//         let titleDateStr = title.match(titleDatePattern);
-//         let captionDateStr = caption.match(captionDatePattern);
-//         if (!titleDateStr || !captionDateStr) {
-//             continue
-//         }
-
-//         const year: number = 2000 + Number(titleDateStr[1].substring(0, 2));
-//         const month: number = -1 + Number(titleDateStr[1].substring(2, 4)); // Months are 0-indexed
-//         const day: number = Number(titleDateStr[1].substring(4, 6));
-//         const months = ['Jan.', 'Feb.', 'March', 'April', 'May', 'June', 'July', 'Aug.', 'Sep.', 'Oct.', 'Nov.', 'Dec.'];
-//         const expectedCaptionDate = `${months[month]} ${day}, ${year}`;
-
-//         if (captionDateStr[2] === expectedCaptionDate) { continue; }
-
-//         const start = match.index + match[1].length + match[2].length + captionDateStr[1].length;
-//         const end = start + captionDateStr[2].length;
-//         const diagnostic: Diagnostic = {
-//             severity: DiagnosticSeverity.Warning,
-//             range: {
-//                 start: textDocument.positionAt(start),
-//                 end: textDocument.positionAt(end)
-//             },
-//             message: `The date in the filename does not match the date in the caption or is not formatted correctly.\nExpected: ${expectedCaptionDate}\nFound:    ${captionDateStr[2]}`,
-//             source: 'Markdown Captions'
-//         };
-//         diagnostics.push(diagnostic);
-//     }
-//     return diagnostics;
-// }
-
 // function validateCaptionDateIsFormattedCorrectly(
 //     existingProblems: number,
 //     settings: Settings,
@@ -661,6 +612,67 @@ class Caption {
         });
     }
 
+    validateFilenameDateMatchesCaptionDate(
+        diagnostics: Diagnostic[],
+        maxNumberOfProblems: number,
+        positionAt: PositionAt,
+    ) {
+        if (diagnostics.length >= maxNumberOfProblems) { return; }
+        let indexOfMatch: number;
+
+        const titleDatePattern = /(\d{6})/i;
+        const captionDatePattern = /(.+)((?:January|Jan|February|Feb|March|Mar|April|Apr|May|June|Jun|July|Jul|August|Aug|September|Sep|October|Oct|November|Nov|December|Dec).?\s+\d{1,2}(?:st|nd|rd|th)?,?\s\d{2,4})/i;
+        const titleDateMatch = this.title.match(titleDatePattern);
+        const captionDateMatch = this.description.match(captionDatePattern);
+
+        if (!titleDateMatch) {
+            indexOfMatch = this.fullText.indexOf(this.title);
+            diagnostics.push({
+                severity: DiagnosticSeverity.Error,
+                range: {
+                    start: positionAt(this.index + indexOfMatch),
+                    end: positionAt(this.index + indexOfMatch + this.title.length)
+                },
+                message: `Unexpected error parsing date from image title.`,
+                source: 'Markdown Captions'
+            });
+            return;
+        }
+        if (!captionDateMatch) {
+            indexOfMatch = this.fullText.indexOf(this.description);
+            diagnostics.push({
+                severity: DiagnosticSeverity.Warning,
+                range: {
+                    start: positionAt(this.index + indexOfMatch),
+                    end: positionAt(this.index + indexOfMatch + this.description.length)
+                },
+                message: `Cound not find date in caption. Expected date resembling "Jan. 1, 2000".`,
+                source: 'Markdown Captions'
+            });
+            return;
+        }
+
+        const year: number = 2000 + Number(titleDateMatch[1].substring(0, 2));
+        const month: number = -1 + Number(titleDateMatch[1].substring(2, 4)); // Months are 0-indexed
+        const day: number = Number(titleDateMatch[1].substring(4, 6));
+        const months = ['Jan.', 'Feb.', 'March', 'April', 'May', 'June', 'July', 'Aug.', 'Sep.', 'Oct.', 'Nov.', 'Dec.'];
+        const expectedCaptionDate = `${months[month]} ${day}, ${year}`;
+
+        if (captionDateMatch[2] === expectedCaptionDate) { return; }
+
+        indexOfMatch = this.fullText.indexOf(captionDateMatch[2]);
+        const diagnostic: Diagnostic = {
+            severity: DiagnosticSeverity.Warning,
+            range: {
+                start: positionAt(this.index + indexOfMatch),
+                end: positionAt(this.index + indexOfMatch + captionDateMatch[2].length)
+            },
+            message: `The date in the filename does not match the date in the caption or is not formatted correctly.\nExpected: ${expectedCaptionDate}\nFound:    ${captionDateMatch[2]}`,
+            source: 'Markdown Captions'
+        };
+        diagnostics.push(diagnostic);
+    }
+
     validate(
         baseKeywordsLength: number,
         diagnostics: Diagnostic[],
@@ -674,6 +686,7 @@ class Caption {
 
         if (diagnostics.length > diagnosticsLength) { return; }
         this.validateFilenamesMatchImageTitles(diagnostics, maxNumberOfProblems, positionAt);
+        this.validateFilenameDateMatchesCaptionDate(diagnostics, maxNumberOfProblems, positionAt);
     }
 };
 
