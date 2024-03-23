@@ -359,7 +359,7 @@ class CaptionBuilder {
                 start: positionAt(priorTextLength),
                 end: positionAt(priorTextLength + text.length)
             },
-            message: `Expected image title resembling "yymmdd-A-AB123-0000", found "${text}".`,
+            message: `Expected image title resembling "yymmdd-X-AB123-0000", found "${text}". (X can be any of A, F, G, M, N, or X)`,
             source: 'Markdown Captions'
         });
     }
@@ -499,7 +499,7 @@ class Caption {
                     start: positionAt(this.index + indexOfMatch),
                     end: positionAt(this.index + indexOfMatch + match[2].length)
                 },
-                message: `Expected filename to be of the format "yymmdd-A-AB123-0000", found "${match[2]}".`,
+                message: `Expected filename to be of the format "yymmdd-X-AB123-0000", found "${match[2]}". (X can be any of A, F, G, M, N, or X)`,
                 source: 'Markdown Captions'
             });
             return;
@@ -541,6 +541,46 @@ class Caption {
                 end: positionAt(this.index + endIndexOfLastKeyword)
             },
             message: `A maximum of 6 total keywords is allowed. Found ${baseKeywordsLength} base keywords and ${this.keywords.length} image-specific keyword${this.keywords.length == 1 ? "" : "s"}.`,
+            source: 'Markdown Captions'
+        });
+    }
+
+    validateTitle(
+        diagnostics: Diagnostic[],
+        maxNumberOfProblems: number,
+        positionAt: PositionAt,
+    ) {
+        if (diagnostics.length >= maxNumberOfProblems) { return; }
+
+        const titlePattern = /^(\d{6}-(?:A|F|G|M|N|X)-[A-Z0-9]{5}-\d{4})\\\s*$/g;
+        let match = titlePattern.exec(this.title);
+        if (match) { return; }
+
+        const missingBackslashPattern = /^(\d{6}-(?:A|F|G|M|N|X)-[A-Z0-9]{5}-\d{4})((?<!\\)\s*)$/g;
+        match = missingBackslashPattern.exec(this.title);
+        let indexOfMatch: number;
+        if (match) {
+            indexOfMatch = this.fullText.indexOf(`\n${match[1]}${match[2]}`) + match[1].length + 1;
+            diagnostics.push({
+                severity: DiagnosticSeverity.Warning,
+                range: {
+                    start: positionAt(this.index + indexOfMatch),
+                    end: positionAt(this.index + indexOfMatch + match[2].length)
+                },
+                message: 'The title should end in a backslash for pandoc and markdown preview to render propper spacing.',
+                source: 'Markdown Captions'
+            });
+            return;
+        }
+
+        indexOfMatch = this.fullText.indexOf(this.title);
+        diagnostics.push({
+            severity: DiagnosticSeverity.Error,
+            range: {
+                start: positionAt(this.index + indexOfMatch),
+                end: positionAt(this.index + indexOfMatch + this.title.length)
+            },
+            message: `Expected image title resembling "yymmdd-X-AB123-0000\\", found "${this.title}". (X can be any of A, F, G, M, N, or X)`,
             source: 'Markdown Captions'
         });
     }
@@ -618,7 +658,7 @@ class Caption {
         const diagnosticsLength = diagnostics.length;
         this.validateImageTag(diagnostics, maxNumberOfProblems, positionAt);
         this.validateKeywords(baseKeywordsLength, diagnostics, maxNumberOfProblems, positionAt);
-        // this.validateTitle(diagnostics, maxNumberOfProblems, positionAt);
+        this.validateTitle(diagnostics, maxNumberOfProblems, positionAt);
 
         if (diagnostics.length > diagnosticsLength) { return; }
         // this.validateFilenamesMatchImageTitles(diagnostics, maxNumberOfProblems, positionAt);
