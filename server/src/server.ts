@@ -467,7 +467,7 @@ class Caption {
         if (diagnostics.length >= maxNumberOfProblems) { return; }
 
         const correctFilenamePattern =
-            /^(!\[\]\(\<.+\/)(\d{6}-(?:A|F|G|M|N|X)-[A-Z0-9]{5}-\d{4})(\.jpg|\.mp4)\>\)/g;
+            /^(!\[\]\(\<.+\/)(\d{6}-(?:A|F|G|M|N|X)-[A-Z0-9]{5}-\d{4})(\.jpg|\.mp4)\>\)\s*$/g;
         let match = correctFilenamePattern.exec(this.imageTag);
         if (match) { return; }
 
@@ -585,69 +585,74 @@ class Caption {
         });
     }
 
-    // validateFilenamesMatchImageTitles(
-    //     diagnostics: Diagnostic[],
-    //     maxNumberOfProblems: number,
-    //     positionAt: PositionAt,
-    // ) {
-    //     // /filename - a bunch of stuff - title/
-    //     const pattern = /(\d{6}-(?:A|F|G|M|N|X)-[A-Z0-9]{5}-\d{4})(.+\n.+\n\n)(\d{6}-(?:A|F|G|M|N|X)-[A-Z0-9]{5}-\d{4})\\/g;
-    //     let match: RegExpExecArray | null;
+    validateFilenamesMatchImageTitles(
+        diagnostics: Diagnostic[],
+        maxNumberOfProblems: number,
+        positionAt: PositionAt,
+        ) {
+        const filenamePattern =
+            /^(!\[\]\(\<.+\/)(\d{6}-(?:A|F|G|M|N|X)-[A-Z0-9]{5}-\d{4})(\.jpg|\.mp4)\>\)\s*$/g;
+        const titlePattern = /^(\d{6}-(?:A|F|G|M|N|X)-[A-Z0-9]{5}-\d{4})\\\s*$/g;
+        const filenameMatch = filenamePattern.exec(this.imageTag);
+        const titleMatch = titlePattern.exec(this.title);
 
-    //     while (
-    //         (match = pattern.exec(text)) &&
-    //         existingProblems + diagnostics.length < settings.maxNumberOfProblems
-    //     ) {
-    //         let filename = match[1];
-    //         let title = match[3];
+        let indexOfMatch: number;
+        if (!filenameMatch) {
+            indexOfMatch = this.fullText.indexOf(this.imageTag);
+            diagnostics.push({
+                severity: DiagnosticSeverity.Error,
+                range: {
+                    start: positionAt(this.index + indexOfMatch),
+                    end: positionAt(this.index + indexOfMatch + this.imageTag.length)
+                },
+                message: `Unexpected error validating image tag.`,
+                source: 'Markdown Captions'
+            });
+            return;
+        }
+        if (!titleMatch) {
+            indexOfMatch = this.fullText.indexOf(this.title);
+            diagnostics.push({
+                severity: DiagnosticSeverity.Error,
+                range: {
+                    start: positionAt(this.index + indexOfMatch),
+                    end: positionAt(this.index + indexOfMatch + this.title.length)
+                },
+                message: `Unexpected error validating image title.`,
+                source: 'Markdown Captions'
+            });
+            return;
+        }
 
-    //         if (filename === title) { continue; }
+        const filename = filenameMatch[2];
+        const title = titleMatch[1];
+        if (filename === title) { return; }
 
-    //         const filenameRange = {
-    //             start: textDocument.positionAt(match.index),
-    //             end: textDocument.positionAt(match.index + match[1].length)
-    //         };
-    //         const filenameDiagnostic: Diagnostic = {
-    //             severity: DiagnosticSeverity.Warning,
-    //             range: filenameRange,
-    //             message: 'This filename does not match the title of this image.',
-    //             source: 'Markdown Captions'
-    //         };
-    //         const titleRange = {
-    //             start: textDocument.positionAt(match.index + match[1].length + match[2].length),
-    //             end: textDocument.positionAt(match.index + match[0].length)
-    //         };
-    //         const titleDiagnostic: Diagnostic = {
-    //             severity: DiagnosticSeverity.Warning,
-    //             range: titleRange,
-    //             message: 'This image title does not match the filename.',
-    //             source: 'Markdown Captions'
-    //         };
-    //         if (hasDiagnosticRelatedInformationCapability) {
-    //             const relatedInformation = [
-    //                 {
-    //                     location: {
-    //                         uri: textDocument.uri,
-    //                         range: filenameRange,
-    //                     },
-    //                     message: `Filename: ${filename}`
-    //                 },
-    //                 {
-    //                     location: {
-    //                         uri: textDocument.uri,
-    //                         range: titleRange,
-    //                     },
-    //                     message: `Title: ${title}`
-    //                 },
-    //             ];
-    //             filenameDiagnostic.relatedInformation = relatedInformation;
-    //             titleDiagnostic.relatedInformation = relatedInformation;
-    //         }
-    //         diagnostics.push(filenameDiagnostic);
-    //         diagnostics.push(titleDiagnostic);
-    //     }
-    //     return diagnostics;
-    // }
+        const indexOfFilenameMatch = this.fullText.indexOf(filename);
+        const indexOfTitleMatch = this.fullText.indexOf(title);
+        const filenameRange = {
+            start: positionAt(this.index + indexOfFilenameMatch),
+            end: positionAt(this.index + indexOfFilenameMatch + filename.length)
+        };
+        const filenameDiagnostic: Diagnostic = {
+            severity: DiagnosticSeverity.Warning,
+            range: filenameRange,
+            message: `This filename does not match the title of this image.\nFilename: ${filename}\nTitle:    ${title}`,
+            source: 'Markdown Captions'
+        };
+        const titleRange = {
+            start: positionAt(this.index + indexOfTitleMatch),
+            end: positionAt(this.index + indexOfTitleMatch + title.length)
+        };
+        const titleDiagnostic: Diagnostic = {
+            severity: DiagnosticSeverity.Warning,
+            range: titleRange,
+            message: `This image title does not match the filename.\nFilename: ${filename}\nTitle:    ${title}`,
+            source: 'Markdown Captions'
+        };
+        diagnostics.push(filenameDiagnostic);
+        diagnostics.push(titleDiagnostic);
+    }
 
     validate(
         baseKeywordsLength: number,
@@ -661,7 +666,7 @@ class Caption {
         this.validateTitle(diagnostics, maxNumberOfProblems, positionAt);
 
         if (diagnostics.length > diagnosticsLength) { return; }
-        // this.validateFilenamesMatchImageTitles(diagnostics, maxNumberOfProblems, positionAt);
+        this.validateFilenamesMatchImageTitles(diagnostics, maxNumberOfProblems, positionAt);
     }
 };
 
