@@ -138,72 +138,6 @@ documents.onDidChangeContent(change => {
     validateTextDocument(change.document);
 });
 
-// function validateFilenamesMatchImageTitles(
-//     existingProblems: number,
-//     settings: Settings,
-//     textDocument: TextDocument
-// ): Diagnostic[] {
-//     const text = textDocument.getText();
-//     // /filename - a bunch of stuff - title/
-//     const pattern = /(\d{6}-(?:A|F|G|M|N|X)-[A-Z0-9]{5}-\d{4})(.+\n.+\n\n)(\d{6}-(?:A|F|G|M|N|X)-[A-Z0-9]{5}-\d{4})\\/g;
-//     let match: RegExpExecArray | null;
-
-//     const diagnostics: Diagnostic[] = [];
-//     while (
-//         (match = pattern.exec(text)) &&
-//         existingProblems + diagnostics.length < settings.maxNumberOfProblems
-//     ) {
-//         let filename = match[1];
-//         let title = match[3];
-
-//         if (filename === title) { continue; }
-
-//         const filenameRange = {
-//             start: textDocument.positionAt(match.index),
-//             end: textDocument.positionAt(match.index + match[1].length)
-//         };
-//         const filenameDiagnostic: Diagnostic = {
-//             severity: DiagnosticSeverity.Warning,
-//             range: filenameRange,
-//             message: 'This filename does not match the title of this image.',
-//             source: 'Markdown Captions'
-//         };
-//         const titleRange = {
-//             start: textDocument.positionAt(match.index + match[1].length + match[2].length),
-//             end: textDocument.positionAt(match.index + match[0].length)
-//         };
-//         const titleDiagnostic: Diagnostic = {
-//             severity: DiagnosticSeverity.Warning,
-//             range: titleRange,
-//             message: 'This image title does not match the filename.',
-//             source: 'Markdown Captions'
-//         };
-//         if (hasDiagnosticRelatedInformationCapability) {
-//             const relatedInformation = [
-//                 {
-//                     location: {
-//                         uri: textDocument.uri,
-//                         range: filenameRange,
-//                     },
-//                     message: `Filename: ${filename}`
-//                 },
-//                 {
-//                     location: {
-//                         uri: textDocument.uri,
-//                         range: titleRange,
-//                     },
-//                     message: `Title: ${title}`
-//                 },
-//             ];
-//             filenameDiagnostic.relatedInformation = relatedInformation;
-//             titleDiagnostic.relatedInformation = relatedInformation;
-//         }
-//         diagnostics.push(filenameDiagnostic);
-//         diagnostics.push(titleDiagnostic);
-//     }
-//     return diagnostics;
-// }
-
 // function validateFileHasCorrectSpacing(
 //     existingProblems: number,
 //     settings: Settings,
@@ -312,14 +246,11 @@ documents.onDidChangeContent(change => {
 
 type PositionAt = (offset: number) => Position;
 type Keywords = string[];
-type Caption = {
-    imageTag: string;
-    keywords: Keywords;
-    title: string;
-    description: string;
-};
+
 class CaptionBuilder {
+    index: number = 0;
     hasLeadingBlankLine: boolean = false;
+    lines: string[] = [];
     imageTag?: string;
     keywords?: Keywords;
     title?: string;
@@ -347,21 +278,21 @@ class CaptionBuilder {
         priorTextLength: number,
         positionAt: PositionAt,
     ): string | undefined {
+        if (diagnostics.length >= maxNumberOfProblems) { return; }
+
         const imageTagPattern = /^!\[\]\(\<.+>\)/g;
         let match = imageTagPattern.exec(text);
         if (match) { return text; }
 
-        if (diagnostics.length < maxNumberOfProblems) {
-            diagnostics.push({
-                severity: DiagnosticSeverity.Error,
-                range: {
-                    start: positionAt(priorTextLength),
-                    end: positionAt(priorTextLength + text.length)
-                },
-                message: `Expected image tag resembling "![](<path/to/image.jpg>)", found "${text}".`,
-                source: 'Markdown Captions'
-            });
-        }
+        diagnostics.push({
+            severity: DiagnosticSeverity.Error,
+            range: {
+                start: positionAt(priorTextLength),
+                end: positionAt(priorTextLength + text.length)
+            },
+            message: `Expected image tag resembling "![](<path/to/image.jpg>)", found "${text}".`,
+            source: 'Markdown Captions'
+        });
     }
 
     getKeywordsFromLine(
@@ -371,27 +302,42 @@ class CaptionBuilder {
         priorTextLength: number,
         positionAt: PositionAt,
     ): Keywords | undefined {
-        const keywordsPattern = /^(Keywords: )(.+;)/g;
-        let match = keywordsPattern.exec(text);
+        if (diagnostics.length >= maxNumberOfProblems) { return; }
+
+        const unfinishedKeywordsPattern = /^(Keywords:)(\s*)(.+;)?(\s*)(\S+(?<!;))$/g;
+        let match = unfinishedKeywordsPattern.exec(text);
         if (match) {
-            let keywords = match[2]
+            const matchesLength = match[1].length + match[2].length + (match[3]?.length || 0) + match[4].length;
+            diagnostics.push({
+                severity: DiagnosticSeverity.Error,
+                range: {
+                    start: positionAt(priorTextLength + matchesLength),
+                    end: positionAt(priorTextLength + text.length)
+                },
+                message: `All keywords must end in a ";", found "${match[5]}" but expected "${match[5]};".`,
+                source: 'Markdown Captions'
+            });
+        }
+
+        const keywordsPattern = /^(Keywords:)(\s*)(.+;)?/g;
+        match = keywordsPattern.exec(text);
+        if (match) {
+            let keywords = (match[3] || '')
                 .split(';')
                 .map(k => k.trim())
                 .filter(k => k.length > 0);
             return keywords;
         }
 
-        if (diagnostics.length < maxNumberOfProblems) {
-            diagnostics.push({
-                severity: DiagnosticSeverity.Error,
-                range: {
-                    start: positionAt(priorTextLength),
-                    end: positionAt(priorTextLength + text.length)
-                },
-                message: `Expected line resembling "Keywords: Some; keywords;", found "${text}".`,
-                source: 'Markdown Captions'
-            });
-        }
+        diagnostics.push({
+            severity: DiagnosticSeverity.Error,
+            range: {
+                start: positionAt(priorTextLength),
+                end: positionAt(priorTextLength + text.length)
+            },
+            message: `Expected line resembling "Keywords: Some; keywords;", found "${text}".`,
+            source: 'Markdown Captions'
+        });
     }
 
     getTitleFromLine(
@@ -401,21 +347,21 @@ class CaptionBuilder {
         priorTextLength: number,
         positionAt: PositionAt,
     ): string | undefined {
+        if (diagnostics.length >= maxNumberOfProblems) { return; }
+
         const titlePattern = /^\d+-.+-\d+/g;
         let match = titlePattern.exec(text);
         if (match) { return text; }
 
-        if (diagnostics.length < maxNumberOfProblems) {
-            diagnostics.push({
-                severity: DiagnosticSeverity.Error,
-                range: {
-                    start: positionAt(priorTextLength),
-                    end: positionAt(priorTextLength + text.length)
-                },
-                message: `Expected image title resembling "yymmdd-A-AB123-0000", found "${text}".`,
-                source: 'Markdown Captions'
-            });
-        }
+        diagnostics.push({
+            severity: DiagnosticSeverity.Error,
+            range: {
+                start: positionAt(priorTextLength),
+                end: positionAt(priorTextLength + text.length)
+            },
+            message: `Expected image title resembling "yymmdd-A-AB123-0000", found "${text}".`,
+            source: 'Markdown Captions'
+        });
     }
 
     getFieldFromLine(
@@ -425,6 +371,11 @@ class CaptionBuilder {
         priorTextLength: number,
         positionAt: PositionAt,
     ) {
+        if (diagnostics.length >= maxNumberOfProblems) { return; }
+
+        this.index = this.index || priorTextLength;
+        this.lines.push(text);
+
         const blankLinePattern = /^\s*$/;
         let match = blankLinePattern.exec(text);
         if (match) {
@@ -434,18 +385,17 @@ class CaptionBuilder {
 
         if (!this.hasLeadingBlankLine) {
             this.hasLeadingBlankLine = true;
-            if (diagnostics.length < maxNumberOfProblems) {
-                diagnostics.push({
-                    severity: DiagnosticSeverity.Warning,
-                    range: {
-                        start: positionAt(priorTextLength),
-                        end: positionAt(priorTextLength + text.length)
-                    },
-                    message: 'There should be at least one blank line between captions.',
-                    source: 'Markdown Captions'
-                });
-            }
+            diagnostics.push({
+                severity: DiagnosticSeverity.Warning,
+                range: {
+                    start: positionAt(priorTextLength),
+                    end: positionAt(priorTextLength + text.length)
+                },
+                message: 'There should be at least one blank line between captions.',
+                source: 'Markdown Captions'
+            });
         }
+
         if (!this.imageTag) {
             this.imageTag = this.getImageTagFromLine(text, diagnostics, maxNumberOfProblems, priorTextLength, positionAt);
             return;
@@ -474,14 +424,206 @@ class CaptionBuilder {
             return null;
         }
 
-        return {
-            imageTag: this.imageTag,
-            keywords: this.keywords,
-            title: this.title,
-            description: this.description,
-        };
+        return new Caption(
+            this.index,
+            this.lines.join('\n'),
+            this.imageTag,
+            this.keywords,
+            this.title,
+            this.description,
+        );
     }
 }
+
+class Caption {
+    index: number;          // The index of the first line of the caption
+    fullText: string;        // Full text of the caption split by line
+    imageTag: string;       // The image tag line - "![](<path/to/image.jpg>)"
+    keywords: Keywords;     // The keywords array - ["X", "Y", "Z"]
+    title: string;          // The title line - "yymmdd-A-AB123-0000\"
+    description: string;    // The description - "X person does Y on Z date."
+
+    constructor(
+        index: number,
+        fullText: string,
+        imageTag: string,
+        keywords: Keywords,
+        title: string,
+        description: string
+    ) {
+        this.index = index;
+        this.fullText = fullText;
+        this.imageTag = imageTag;
+        this.keywords = keywords;
+        this.title = title;
+        this.description = description;
+    }
+
+    validateImageTag(
+        diagnostics: Diagnostic[],
+        maxNumberOfProblems: number,
+        positionAt: PositionAt,
+    ) {
+        if (diagnostics.length >= maxNumberOfProblems) { return; }
+
+        const correctFilenamePattern =
+            /^(!\[\]\(\<.+\/)(\d{6}-(?:A|F|G|M|N|X)-[A-Z0-9]{5}-\d{4})(\.jpg|\.mp4)\>\)/g;
+        let match = correctFilenamePattern.exec(this.imageTag);
+        if (match) { return; }
+
+        const incorrectExtensionPattern =
+            /^(!\[\]\(\<.+\/)(\d{6}-(?:A|F|G|M|N|X)-[A-Z0-9]{5}-\d{4})(.+)\>\)/g;
+        let indexOfMatch: number;
+        match = incorrectExtensionPattern.exec(this.imageTag);
+        if (match) {
+            indexOfMatch = this.fullText.indexOf(match[3]);
+            diagnostics.push({
+                severity: DiagnosticSeverity.Warning,
+                range: {
+                    start: positionAt(this.index + indexOfMatch),
+                    end: positionAt(this.index + indexOfMatch + match[3].length)
+                },
+                message: `Expected image tag file extension to be .jpg or .mp4, found "${match[3]}".\nUsage of files with other extensions may result in unexpected outcomes.`,
+                source: 'Markdown Captions'
+            });
+            return;
+        }
+
+        const incorrectFilenamePattern = /^(!\[\]\(\<.+\/)(.+)(\..+)\>\)/g;
+        match = incorrectFilenamePattern.exec(this.imageTag);
+        if (match) {
+            indexOfMatch = this.fullText.indexOf(match[2]);
+            diagnostics.push({
+                severity: DiagnosticSeverity.Error,
+                range: {
+                    start: positionAt(this.index + indexOfMatch),
+                    end: positionAt(this.index + indexOfMatch + match[2].length)
+                },
+                message: `Expected filename to be of the format "yymmdd-A-AB123-0000", found "${match[2]}".`,
+                source: 'Markdown Captions'
+            });
+            return;
+        }
+
+        indexOfMatch = this.fullText.indexOf(this.imageTag);
+        diagnostics.push({
+            severity: DiagnosticSeverity.Error,
+            range: {
+                start: positionAt(this.index + indexOfMatch),
+                end: positionAt(this.index + indexOfMatch + this.imageTag.length)
+            },
+            message: `Unexpected error validating image tag.`,
+            source: 'Markdown Captions'
+        });
+    }
+
+    validateKeywords(
+        baseKeywordsLength: number,
+        diagnostics: Diagnostic[],
+        maxNumberOfProblems: number,
+        positionAt: PositionAt,
+    ) {
+        if (diagnostics.length >= maxNumberOfProblems) { return; }
+
+        if (this.keywords.length == 0 || baseKeywordsLength + this.keywords.length <= 6) {
+            return;
+        }
+
+        const indexOfFirstKeyword =
+            this.fullText.indexOf(`${this.keywords[0]};`);
+        const endIndexOfLastKeyword =
+            this.fullText.indexOf(`${this.keywords[this.keywords.length - 1]};`) +
+            this.keywords[this.keywords.length - 1].length + 1;
+        diagnostics.push({
+            severity: DiagnosticSeverity.Error,
+            range: {
+                start: positionAt(this.index + indexOfFirstKeyword),
+                end: positionAt(this.index + endIndexOfLastKeyword)
+            },
+            message: `A maximum of 6 total keywords is allowed. Found ${baseKeywordsLength} base keywords and ${this.keywords.length} image-specific keyword${this.keywords.length == 1 ? "" : "s"}.`,
+            source: 'Markdown Captions'
+        });
+    }
+
+    // validateFilenamesMatchImageTitles(
+    //     diagnostics: Diagnostic[],
+    //     maxNumberOfProblems: number,
+    //     positionAt: PositionAt,
+    // ) {
+    //     // /filename - a bunch of stuff - title/
+    //     const pattern = /(\d{6}-(?:A|F|G|M|N|X)-[A-Z0-9]{5}-\d{4})(.+\n.+\n\n)(\d{6}-(?:A|F|G|M|N|X)-[A-Z0-9]{5}-\d{4})\\/g;
+    //     let match: RegExpExecArray | null;
+
+    //     while (
+    //         (match = pattern.exec(text)) &&
+    //         existingProblems + diagnostics.length < settings.maxNumberOfProblems
+    //     ) {
+    //         let filename = match[1];
+    //         let title = match[3];
+
+    //         if (filename === title) { continue; }
+
+    //         const filenameRange = {
+    //             start: textDocument.positionAt(match.index),
+    //             end: textDocument.positionAt(match.index + match[1].length)
+    //         };
+    //         const filenameDiagnostic: Diagnostic = {
+    //             severity: DiagnosticSeverity.Warning,
+    //             range: filenameRange,
+    //             message: 'This filename does not match the title of this image.',
+    //             source: 'Markdown Captions'
+    //         };
+    //         const titleRange = {
+    //             start: textDocument.positionAt(match.index + match[1].length + match[2].length),
+    //             end: textDocument.positionAt(match.index + match[0].length)
+    //         };
+    //         const titleDiagnostic: Diagnostic = {
+    //             severity: DiagnosticSeverity.Warning,
+    //             range: titleRange,
+    //             message: 'This image title does not match the filename.',
+    //             source: 'Markdown Captions'
+    //         };
+    //         if (hasDiagnosticRelatedInformationCapability) {
+    //             const relatedInformation = [
+    //                 {
+    //                     location: {
+    //                         uri: textDocument.uri,
+    //                         range: filenameRange,
+    //                     },
+    //                     message: `Filename: ${filename}`
+    //                 },
+    //                 {
+    //                     location: {
+    //                         uri: textDocument.uri,
+    //                         range: titleRange,
+    //                     },
+    //                     message: `Title: ${title}`
+    //                 },
+    //             ];
+    //             filenameDiagnostic.relatedInformation = relatedInformation;
+    //             titleDiagnostic.relatedInformation = relatedInformation;
+    //         }
+    //         diagnostics.push(filenameDiagnostic);
+    //         diagnostics.push(titleDiagnostic);
+    //     }
+    //     return diagnostics;
+    // }
+
+    validate(
+        baseKeywordsLength: number,
+        diagnostics: Diagnostic[],
+        maxNumberOfProblems: number,
+        positionAt: PositionAt,
+    ) {
+        const diagnosticsLength = diagnostics.length;
+        this.validateImageTag(diagnostics, maxNumberOfProblems, positionAt);
+        this.validateKeywords(baseKeywordsLength, diagnostics, maxNumberOfProblems, positionAt);
+        // this.validateTitle(diagnostics, maxNumberOfProblems, positionAt);
+
+        if (diagnostics.length > diagnosticsLength) { return; }
+        // this.validateFilenamesMatchImageTitles(diagnostics, maxNumberOfProblems, positionAt);
+    }
+};
 
 function validateHeadline(
     text: string,
@@ -490,10 +632,11 @@ function validateHeadline(
     priorTextLength: number,
     positionAt: PositionAt,
 ): string {
-    const headlinePattern = /^(.+)(?<!\\)$/;
+    if (diagnostics.length >= maxNumberOfProblems) { return text; }
 
+    const headlinePattern = /^(.+)(?<!\\)$/;
     const match = headlinePattern.exec(text);
-    if (match && diagnostics.length < maxNumberOfProblems) {
+    if (match) {
         diagnostics.push({
             severity: DiagnosticSeverity.Warning,
             range: {
@@ -514,6 +657,8 @@ function validateByline(
     priorTextLength: number,
     positionAt: PositionAt,
 ): string {
+    if (diagnostics.length >= maxNumberOfProblems) { return ''; }
+
     const bylinePattern = /^By (.+)/;
     let match = bylinePattern.exec(text);
     if (match) {
@@ -523,31 +668,27 @@ function validateByline(
     const blankLinePattern = /^\s*$/;
     match = blankLinePattern.exec(text);
     if (match) {
-        if (diagnostics.length < maxNumberOfProblems) {
-            diagnostics.push({
-                severity: DiagnosticSeverity.Warning,
-                range: {
-                    start: positionAt(priorTextLength),
-                    end: positionAt(priorTextLength + text.length)
-                },
-                message: 'Expected byline to immediately follow the headline.',
-                source: 'Markdown Captions'
-            });
-        }
-        return '';
-    }
-
-    if (diagnostics.length < maxNumberOfProblems) {
         diagnostics.push({
-            severity: DiagnosticSeverity.Error,
+            severity: DiagnosticSeverity.Warning,
             range: {
                 start: positionAt(priorTextLength),
                 end: positionAt(priorTextLength + text.length)
             },
-            message: `Expected byline, found "${text}".`,
+            message: 'Expected byline to immediately follow the headline.',
             source: 'Markdown Captions'
         });
+        return '';
     }
+
+    diagnostics.push({
+        severity: DiagnosticSeverity.Error,
+        range: {
+            start: positionAt(priorTextLength),
+            end: positionAt(priorTextLength + text.length)
+        },
+        message: `Expected byline, found "${text}".`,
+        source: 'Markdown Captions'
+    });
     return text;
 }
 
@@ -558,28 +699,28 @@ function validateBaseKeywords(
     priorTextLength: number,
     positionAt: PositionAt,
 ): Keywords | null {
+    if (diagnostics.length >= maxNumberOfProblems) { return null; }
+
     const blankLinePattern = /^\s*$/;
     let match = blankLinePattern.exec(text);
     if (match) { return null; }
 
-    const keywordsPattern = /(Keywords: )(.+;)/g;
+    const keywordsPattern = /^(Keywords:)(\s*)(.+;)?/g;
     match = keywordsPattern.exec(text);
     if (!match) {
-        if (diagnostics.length < maxNumberOfProblems) {
-            diagnostics.push({
-                severity: DiagnosticSeverity.Error,
-                range: {
-                    start: positionAt(priorTextLength),
-                    end: positionAt(priorTextLength + text.length)
-                },
-                message: `Expected keywords, found "${text}".`,
-                source: 'Markdown Captions'
-            });
-        }
+        diagnostics.push({
+            severity: DiagnosticSeverity.Error,
+            range: {
+                start: positionAt(priorTextLength),
+                end: positionAt(priorTextLength + text.length)
+            },
+            message: `Expected keywords, found "${text}".`,
+            source: 'Markdown Captions'
+        });
         return null;
     }
 
-    let keywords = match[2]
+    let keywords = (match[3] || '')
         .split(';')
         .map(k => k.trim())
         .filter(k => k.length > 0);
@@ -648,18 +789,23 @@ async function validateTextDocument(textDocument: TextDocument): Promise<Diagnos
             firstMissingField === 'description' ? 'is' : 'and all later fields are';
         let message =
             `Found incomplete caption. The ${firstMissingField} ${isAre} missing.`;
-        diagnostics.push({
-            severity: DiagnosticSeverity.Error,
-            range: {
-                start: positionAt(priorTextLength - lines[lines.length - 1].length - 1),
-                end: positionAt(priorTextLength)
-            },
-            message,
-            source: 'Markdown Captions'
-        });
+        if (diagnostics.length < maxNumberOfProblems) {
+            diagnostics.push({
+                severity: DiagnosticSeverity.Error,
+                range: {
+                    start: positionAt(priorTextLength - lines[lines.length - 1].length - 1),
+                    end: positionAt(priorTextLength)
+                },
+                message,
+                source: 'Markdown Captions'
+            });
+        }
     }
 
-    // TODO: Validate captions
+    const baseKeywordsLength = baseKeywords?.length || 0;
+    for (caption of captions) {
+        caption.validate(baseKeywordsLength, diagnostics, maxNumberOfProblems, positionAt);
+    }
 
     return diagnostics;
 }
