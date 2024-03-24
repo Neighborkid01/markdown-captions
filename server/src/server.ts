@@ -736,6 +736,35 @@ class Caption {
         }
     }
 
+    validateAbbreviationActuallyUsedASecondTime(
+        diagnostics: Diagnostic[],
+        maxNumberOfProblems: number,
+        positionAt: PositionAt,
+    ) {
+        if (diagnostics.length >= maxNumberOfProblems) { return; }
+        let indexOfMatch: number;
+        let secondIndexOfMatch: number;
+        let match: RegExpExecArray | null;
+        const punctuationPattern = /\((.+?)(?<![Pp]hoto|[Vv]ideo)\)/g;
+
+        while (match = punctuationPattern.exec(this.description)) {
+            indexOfMatch = this.fullText.indexOf(match[0]);
+            // +2 because match[0] includes the parentheses
+            secondIndexOfMatch = this.fullText.indexOf(match[1], indexOfMatch + 2);
+            if (secondIndexOfMatch !== -1) { continue; }
+
+            diagnostics.push({
+                severity: DiagnosticSeverity.Warning,
+                range: {
+                    start: positionAt(this.index + indexOfMatch),
+                    end: positionAt(this.index + indexOfMatch + match[0].length)
+                },
+                message: `Abbreviation "${match[1]}" is never used a second time.`,
+                source: 'Markdown Captions'
+            });
+        }
+    }
+
     validate(
         baseKeywordsLength: number,
         diagnostics: Diagnostic[],
@@ -752,7 +781,7 @@ class Caption {
         this.validateFilenameDateMatchesCaptionDate(diagnostics, maxNumberOfProblems, positionAt);
         this.validateNoDoublePunctuation(diagnostics, maxNumberOfProblems, positionAt);
         this.validateAbbreviationsArePunctuatedCorrectly(diagnostics, maxNumberOfProblems, positionAt);
-        // this.validateAbbreviationActuallyUsedOnSecondReference(diagnostics, maxNumberOfProblems, positionAt);
+        this.validateAbbreviationActuallyUsedASecondTime(diagnostics, maxNumberOfProblems, positionAt);
     }
 };
 
