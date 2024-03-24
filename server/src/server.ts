@@ -139,22 +139,6 @@ documents.onDidChangeContent(change => {
     validateTextDocument(change.document);
 });
 
-// function validateAbbreviationsArePunctuatedCorrectly(
-//     existingProblems: number,
-//     settings: Settings,
-//     textDocument: TextDocument
-// ): Diagnostic[] {
-//     return [];
-// }
-
-// function validateAbbreviationOnlyUsedOnSecondRefference(
-//     existingProblems: number,
-//     settings: Settings,
-//     textDocument: TextDocument
-// ): Diagnostic[] {
-//     return [];
-// }
-
 // function validateLinesThatShouldEndInBackslashesDo(
 //     existingProblems: number,
 //     settings: Settings,
@@ -666,6 +650,30 @@ class Caption {
         diagnostics.push(diagnostic);
     }
 
+    validateNoDoublePunctuation(
+        diagnostics: Diagnostic[],
+        maxNumberOfProblems: number,
+        positionAt: PositionAt,
+    ) {
+        if (diagnostics.length >= maxNumberOfProblems) { return; }
+        let indexOfMatch: number;
+        let match: RegExpExecArray | null;
+        const punctuationPattern = /(?:\.,|,\.|([ ;:+-=!@#$%^&*()<>{}[\]\\'"?/`~])\1{1,})/g;
+
+        while (match = punctuationPattern.exec(this.description)) {
+            indexOfMatch = this.fullText.indexOf(match[0]);
+            diagnostics.push({
+                severity: DiagnosticSeverity.Warning,
+                range: {
+                    start: positionAt(this.index + indexOfMatch),
+                    end: positionAt(this.index + indexOfMatch + match[0].length)
+                },
+                message: `Found multiple consecutive punctuation characters "${match[0]}"`,
+                source: 'Markdown Captions'
+            });
+        }
+    }
+
     validateAbbreviationsArePunctuatedCorrectly(
         diagnostics: Diagnostic[],
         maxNumberOfProblems: number,
@@ -679,6 +687,7 @@ class Caption {
         const abbreviations: AbbreviationDictionary = {
             // Generic abbreviations
             'U.S.': /\b(?:US\b|U\.S\b|US\.)(?!\.)/g,
+            // TODO: U.S. States
             // Officers
             '2nd Lt.': /\b(?<!Second |First |2nd |1st |2 |1 )(?:Lt(?:\.)?(?! Col| Gen)|2 Lt(?:\.)?|2nd Lt|(?:Second |2 |2nd )?Lieutenant(?:\.)?(?! Col| Gen))(?!\.)/g,
             '1st Lt.': /\b(?<!Second |First |2nd |1st |2 |1 )(?:Lt(?:\.)?(?! Col| Gen)|1 Lt(?:\.)?|1st Lt|(?:First |1 |1st )?Lieutenant(?:\.)?(?! Col| Gen))(?!\.)/g,
@@ -741,7 +750,9 @@ class Caption {
         if (diagnostics.length > diagnosticsLength) { return; }
         this.validateFilenamesMatchImageTitles(diagnostics, maxNumberOfProblems, positionAt);
         this.validateFilenameDateMatchesCaptionDate(diagnostics, maxNumberOfProblems, positionAt);
+        this.validateNoDoublePunctuation(diagnostics, maxNumberOfProblems, positionAt);
         this.validateAbbreviationsArePunctuatedCorrectly(diagnostics, maxNumberOfProblems, positionAt);
+        // this.validateAbbreviationActuallyUsedOnSecondReference(diagnostics, maxNumberOfProblems, positionAt);
     }
 };
 
