@@ -17,6 +17,7 @@ import {
     Position,
     TextDocument
 } from 'vscode-languageserver-textdocument';
+import { log } from 'console';
 
 // Create a connection for the server, using Node's IPC as a transport.
 // Also include all preview / proposed LSP features.
@@ -137,14 +138,6 @@ connection.languages.diagnostics.on(async (params) => {
 documents.onDidChangeContent(change => {
     validateTextDocument(change.document);
 });
-
-// function validateCaptionDateIsFormattedCorrectly(
-//     existingProblems: number,
-//     settings: Settings,
-//     textDocument: TextDocument
-// ): Diagnostic[] {
-//     return [];
-// }
 
 // function validateAbbreviationsArePunctuatedCorrectly(
 //     existingProblems: number,
@@ -673,6 +666,67 @@ class Caption {
         diagnostics.push(diagnostic);
     }
 
+    validateAbbreviationsArePunctuatedCorrectly(
+        diagnostics: Diagnostic[],
+        maxNumberOfProblems: number,
+        positionAt: PositionAt,
+    ) {
+        let indexOfMatch: number;
+        let match: RegExpExecArray | null;
+        type AbbreviationDictionary = {
+            [Key: string]: RegExp;
+        };
+        const abbreviations: AbbreviationDictionary = {
+            // Generic abbreviations
+            'U.S.': /\b(?:US\b|U\.S\b|US\.)(?!\.)/g,
+            // Officers
+            '2nd Lt.': /\b(?<!Second |First |2nd |1st |2 |1 )(?:Lt(?:\.)?(?! Col| Gen)|2 Lt(?:\.)?|2nd Lt|(?:Second |2 |2nd )?Lieutenant(?:\.)?(?! Col| Gen))(?!\.)/g,
+            '1st Lt.': /\b(?<!Second |First |2nd |1st |2 |1 )(?:Lt(?:\.)?(?! Col| Gen)|1 Lt(?:\.)?|1st Lt|(?:First |1 |1st )?Lieutenant(?:\.)?(?! Col| Gen))(?!\.)/g,
+            'Capt.': /\b(?:Cpt\b|Cpt\.|Capt\b|Captain\b|Captain\.)(?!\.)/g,
+            'Maj.': /\b(?:Maj\b|Major(?:\.)?)(?! Gen)(?!\.)/g,
+            'Lt. Col.': /\b(?:Lt Col\.|Lt(?:\.)? Col\b|(?:Lt|Lieutenant)(?:\.)? Colonel(?:\.)?)(?!\.)/g,
+            'Col.': /\b(?<!Lt |Lt\. |Lieutenant )(?:Col\b|Colonel(?:\.)?)(?!\.)/g,
+            'Brig. Gen.': /\b(?:Brig Gen\.|Brig(?:\.)? Gen\b|(?:Brig|Brigadier)(?:\.)? General(?:\.)?)(?!\.)/g,
+            'Maj. Gen.': /\b(?:Maj Gen\.|Maj(?:\.)? Gen\b|(?:Maj|Major)(?:\.)? General(?:\.)?)(?!\.)/g,
+            'Lt. Gen.': /\b(?:Lt Gen\.|Lt(?:\.)? Gen\b|(?:Lt|Lieutenant)(?:\.)? General(?:\.)?)(?!\.)/g,
+            'Gen.': /\b(?<!Brig\. |Brig |Brigadier |Maj\. |Maj |Major |Lt\. |Lt |Lieutenant )(?:Gen\b|General(?:\.)?)(?!\.)/g,
+            // TODO: Naval Officers
+            // USAF Enlisted
+            'Airman': /\b(?<!Sr |Sr\. |Sen |Sen\. |Senior )(?:Airman Basic(?:\.)?|AB(?:\.)?|Amn(?:\.)?(?! 1st| First)|Airman\.)(?!\.)/g,
+            'Airman 1st Class': /\b(?:Airman First Class|Airman 1st Class\.|A1C|Amn(?:\.)? (?:1st|First) Class)/g,
+            'Senior Airman': /\b(?:SrA(?:\.)?|(?:Sr|Sen)(?:\.)? (?:Amn|Airman)(?:\.)?|Senior Amn(?:\.)?|Senior Airman\.)/g,
+            'Staff Sgt.': /\b(?:SSgt(?:\.)?|Staff (?:Sgt|Sergeant)|Staff Sergeant\.)(?!\.)/g,
+            'Tech. Sgt.': /\b(?:TSgt(?:\.)?|(?:Tech|Technical) (?:Sgt|Sergeant)(?:\.)?|Tech\. Sergeant(?:\.)?|Tech\. Sgt)(?!\.)/g,
+            'Master Sgt.': /\b(?<!Sr |Sr\. |Sen |Sen\. |Senior |Chief )(?:MSgt(?:\.)?|Mstr(?:\.)? (?:Sgt|Sergeant)(?:\.)?|Master Sergeant(?:\.)?|Master Sgt)(?!\.)/g,
+            'Senior Master Sgt.': /\b(?:SMSgt(?:\.)?|(?:Sr|Sen)(?:\.)? (?:Mstr|Master)(?:\.)? (?:Sgt|Sergeant)(?:\.)?|Senior Mstr(?:\.)? (?:Sgt|Sergeant)(?:\.)?|Senior Master Sergeant(?:\.)?|Senior Master Sgt)(?!\.)/g,
+            'Chief Master Sgt.': /\b(?:CMSgt(?:\.)?|Chief Mstr(?:\.)? (?:Sgt|Sergeant)(?:\.)?|Chief Master Sergeant(?:\.)?|Chief Master Sgt)(?!\.)/g,
+            'Command Chief Master Sgt.': /\b(?:CCMSgt(?:\.)?|Cmnd(?:\.)? Chief (?:Mstr|Master)(?:\.)? (?:Sgt|Sergeant)(?:\.)?|Command Chief Mstr(?:\.)? (?:Sgt|Sergeant)(?:\.)?|Command Chief Master Sergeant(?:\.)?|Command Chief Master Sgt)(?!\.)/g,
+            'Chief Master Sgt. of the Air Force': /\b(?:CMSAF(?:\.)?|Chief Mstr(?:\.)? (?:Sgt|Sergeant)(?:\.)? of the Air Force|Chief Master Sergeant(?:\.)? of the Air Force|Chief Master Sgt of the Air Force)(?!\.)/g,
+            // TODO: Other enlisted
+        };
+
+        for (let abbreviation in abbreviations) {
+            indexOfMatch = 0;
+            while (match = abbreviations[abbreviation].exec(this.description)) {
+                if (diagnostics.length >= maxNumberOfProblems) { return; }
+                if (abbreviation === '2nd Lt.' || abbreviation === '1st Lt.') {
+                    log(abbreviation);
+                }
+
+                indexOfMatch = this.fullText.indexOf(match[0], indexOfMatch + 1);
+                diagnostics.push({
+                    severity: DiagnosticSeverity.Warning,
+                    range: {
+                        start: positionAt(this.index + indexOfMatch),
+                        end: positionAt(this.index + indexOfMatch + match[0].length)
+                    },
+                    message: `"${match[0]}" should be "${abbreviation}`,
+                    source: 'Markdown Captions'
+                });
+            }
+        }
+    }
+
     validate(
         baseKeywordsLength: number,
         diagnostics: Diagnostic[],
@@ -687,6 +741,7 @@ class Caption {
         if (diagnostics.length > diagnosticsLength) { return; }
         this.validateFilenamesMatchImageTitles(diagnostics, maxNumberOfProblems, positionAt);
         this.validateFilenameDateMatchesCaptionDate(diagnostics, maxNumberOfProblems, positionAt);
+        this.validateAbbreviationsArePunctuatedCorrectly(diagnostics, maxNumberOfProblems, positionAt);
     }
 };
 
