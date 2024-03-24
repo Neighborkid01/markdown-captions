@@ -139,31 +139,6 @@ documents.onDidChangeContent(change => {
     validateTextDocument(change.document);
 });
 
-// function validateLinesThatShouldEndInBackslashesDo(
-//     existingProblems: number,
-//     settings: Settings,
-//     textDocument: TextDocument
-// ): Diagnostic[] {
-//     return [];
-// }
-
-// function validateVIRINsAreValid(
-//     existingProblems: number,
-//     settings: Settings,
-//     textDocument: TextDocument
-// ): Diagnostic[] {
-//     return [];
-// }
-
-// function validateUSStateNamesAreValid(
-//     existingProblems: number,
-//     settings: Settings,
-//     textDocument: TextDocument
-// ): Diagnostic[] {
-
-//     return [];
-// }
-
 type PositionAt = (offset: number) => Position;
 type Keywords = string[];
 
@@ -650,6 +625,30 @@ class Caption {
         diagnostics.push(diagnostic);
     }
 
+    validateDescriptionEndsWithABackslash(
+        diagnostics: Diagnostic[],
+        maxNumberOfProblems: number,
+        positionAt: PositionAt,
+    ) {
+        if (diagnostics.length >= maxNumberOfProblems) { return; }
+        let indexOfMatch: number;
+
+        const backslashPattern = /\\$/g;
+        let match = backslashPattern.exec(this.description);
+        if (match) { return; }
+
+        indexOfMatch = this.fullText.indexOf(this.description);
+        diagnostics.push({
+            severity: DiagnosticSeverity.Warning,
+            range: {
+                start: positionAt(this.index + indexOfMatch + this.description.length),
+                end: positionAt(this.index + indexOfMatch + this.description.length + 1)
+            },
+            message: "The description should end in a backslash for pandoc to render propper spacing.",
+            source: 'Markdown Captions'
+        });
+    }
+
     validateNoDoublePunctuation(
         diagnostics: Diagnostic[],
         maxNumberOfProblems: number,
@@ -779,6 +778,7 @@ class Caption {
         if (diagnostics.length > diagnosticsLength) { return; }
         this.validateFilenamesMatchImageTitles(diagnostics, maxNumberOfProblems, positionAt);
         this.validateFilenameDateMatchesCaptionDate(diagnostics, maxNumberOfProblems, positionAt);
+        this.validateDescriptionEndsWithABackslash(diagnostics, maxNumberOfProblems, positionAt);
         this.validateNoDoublePunctuation(diagnostics, maxNumberOfProblems, positionAt);
         this.validateAbbreviationsArePunctuatedCorrectly(diagnostics, maxNumberOfProblems, positionAt);
         this.validateAbbreviationActuallyUsedASecondTime(diagnostics, maxNumberOfProblems, positionAt);
@@ -864,6 +864,21 @@ function validateBaseKeywords(
     const blankLinePattern = /^\s*$/;
     let match = blankLinePattern.exec(text);
     if (match) { return null; }
+
+    const unfinishedKeywordsPattern = /^(Keywords:)(\s*)(.+;)?(\s*)(\S+(?<!;))$/g;
+    match = unfinishedKeywordsPattern.exec(text);
+    if (match) {
+        const matchesLength = match[1].length + match[2].length + (match[3]?.length || 0) + match[4].length;
+        diagnostics.push({
+            severity: DiagnosticSeverity.Error,
+            range: {
+                start: positionAt(priorTextLength + matchesLength),
+                end: positionAt(priorTextLength + text.length)
+            },
+            message: `All keywords must end in a ";", found "${match[5]}" but expected "${match[5]};".`,
+            source: 'Markdown Captions'
+        });
+    }
 
     const keywordsPattern = /^(Keywords:)(\s*)(.+;)?/g;
     match = keywordsPattern.exec(text);
