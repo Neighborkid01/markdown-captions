@@ -34,6 +34,12 @@
       "extensions": [".md",".mdc",".mdown",".markdown",".markdn"],
       "configuration": "./language-configuration.json"
     }],
+    "keybindings": [{
+      "command": "markdown.showPreviewToSide",
+      "key": "ctrl+k v",
+      "mac": "cmd+k v",
+      "when": "!notebookEditorFocused && (editorLangId == 'markdown' || editorLangId == 'Markdown-Captions')"
+    }],
     "grammars": [{
       "language": "Markdown-Captions",
       "scopeName": "text.html.markdown.captions",
