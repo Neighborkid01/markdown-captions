@@ -682,7 +682,8 @@ class Caption {
         if (diagnostics.length >= maxNumberOfProblems) { return; }
         let indexOfMatch: number;
         let match: RegExpExecArray | null;
-        const punctuationPattern = /(?:\.,|,\.|([ ;:+-=!@#$%^&*()<>{}[\]\\'"?/`~])\1{1,})/g;
+        // Using a character class caused this to falsely identify numbers as punctuation
+        const punctuationPattern = /(?:\.,|,\.|( |;|:|\+|-|=|!|@|#|\$|%|\^|&|\*|\(|\)|<|>|{|}|\[|\]|\\|'|"|\?|\/|`|~)\1{1,})/g;
 
         while (match = punctuationPattern.exec(this.description)) {
             indexOfMatch = this.fullText.indexOf(match[0]);
