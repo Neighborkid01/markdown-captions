@@ -18,6 +18,7 @@ import {
     TextDocument
 } from 'vscode-languageserver-textdocument';
 import { log } from 'console';
+import { lstat } from 'fs';
 
 // Create a connection for the server, using Node's IPC as a transport.
 // Also include all preview / proposed LSP features.
@@ -199,8 +200,12 @@ class CaptionBuilder {
     ): Keywords | undefined {
         if (diagnostics.length >= maxNumberOfProblems) { return; }
 
-        const unfinishedKeywordsPattern = /^(Keywords:)(\s*)(.+;)?(\s*)(\S+(?<!;))$/g;
-        let match = unfinishedKeywordsPattern.exec(text);
+        const blankKeywordsPattern = /^(Keywords:)(\s*)$/g;
+        let match = blankKeywordsPattern.exec(text);
+        if (match) { return []; }
+
+        const unfinishedKeywordsPattern = /^(Keywords:)(\s*)(.+;)(\s*)(\S+.*(?<!;))$/g;
+        match = unfinishedKeywordsPattern.exec(text);
         if (match) {
             const matchesLength = match[1].length + match[2].length + (match[3]?.length || 0) + match[4].length;
             diagnostics.push({
@@ -309,7 +314,164 @@ class CaptionBuilder {
         }
     }
 
-    build(): Caption | null {
+    validateImageTag(
+        fullText: string,
+        diagnostics: Diagnostic[],
+        maxNumberOfProblems: number,
+        positionAt: PositionAt,
+    ) {
+        if (diagnostics.length >= maxNumberOfProblems) { return; }
+
+        let indexOfMatch: number;
+        const imageTag = this.imageTag || '';
+
+        const correctFilenamePattern =
+            /^(!\[\]\(\<.+\/)(\d{6}-(?:A|F|G|M|N|X)-[A-Z0-9]{5}-\d{4})(\.jpg|\.mp4)\>\)\s*$/g;
+        let match = correctFilenamePattern.exec(imageTag);
+        if (match) { return; }
+
+        const extraCrapOnTheEndPattern =
+            /^(!\[\]\(\<.+\/)(\d{6}-(?:A|F|G|M|N|X)-[A-Z0-9]{5}-\d{4})(\.jpg|\.mp4)(\>\)\s*)(.+)$/g;
+        match = extraCrapOnTheEndPattern.exec(imageTag);
+        if (match) {
+            indexOfMatch = fullText.indexOf(`${match[4]}${match[5]}`);
+            diagnostics.push({
+                severity: DiagnosticSeverity.Error,
+                range: {
+                    start: positionAt(this.index + indexOfMatch + match[4].length),
+                    end: positionAt(this.index + indexOfMatch + match[4].length + match[5].length)
+                },
+                message: `Found unexpected characters after image title "${match[5]}".`,
+                source: 'Markdown Captions'
+            });
+            return;
+        }
+
+        const incorrectExtensionPattern =
+            /^(!\[\]\(\<.+\/)(\d{6}-(?:A|F|G|M|N|X)-[A-Z0-9]{5}-\d{4})(.+)\>\)\s*$/g;
+        match = incorrectExtensionPattern.exec(imageTag);
+        if (match) {
+            indexOfMatch = fullText.indexOf(match[3]);
+            diagnostics.push({
+                severity: DiagnosticSeverity.Warning,
+                range: {
+                    start: positionAt(this.index + indexOfMatch),
+                    end: positionAt(this.index + indexOfMatch + match[3].length)
+                },
+                message: `Expected image tag file extension to be .jpg or .mp4, found "${match[3]}".\nUsage of files with other extensions may result in unexpected outcomes.`,
+                source: 'Markdown Captions'
+            });
+            return;
+        }
+
+        const incorrectFilenamePattern = /^(!\[\]\(\<.+\/)(.+)(\..+)\>\)\s*$/g;
+        match = incorrectFilenamePattern.exec(imageTag);
+        if (match) {
+            indexOfMatch = fullText.indexOf(match[2]);
+            diagnostics.push({
+                severity: DiagnosticSeverity.Error,
+                range: {
+                    start: positionAt(this.index + indexOfMatch),
+                    end: positionAt(this.index + indexOfMatch + match[2].length)
+                },
+                message: `Expected filename to be of the format "yymmdd-X-AB123-0000", found "${match[2]}". (X can be any of A, F, G, M, N, or X)`,
+                source: 'Markdown Captions'
+            });
+            return;
+        }
+
+        indexOfMatch = fullText.indexOf(imageTag);
+        diagnostics.push({
+            severity: DiagnosticSeverity.Error,
+            range: {
+                start: positionAt(this.index + indexOfMatch),
+                end: positionAt(this.index + indexOfMatch + imageTag.length)
+            },
+            message: `Unexpected error validating image tag.`,
+            source: 'Markdown Captions'
+        });
+    }
+
+    validateKeywords(
+        baseKeywordsLength: number,
+        fullText: string,
+        diagnostics: Diagnostic[],
+        maxNumberOfProblems: number,
+        positionAt: PositionAt,
+    ) {
+        if (diagnostics.length >= maxNumberOfProblems) { return; }
+
+        const keywords = this.keywords || [];
+
+        if (keywords.length == 0 || baseKeywordsLength + keywords.length <= 6) {
+            return;
+        }
+
+        const indexOfFirstKeyword =
+            fullText.indexOf(`${keywords[0]};`);
+        const lastKeyword = keywords[keywords.length - 1];
+        const endIndexOfLastKeyword =
+            fullText.lastIndexOf(`${lastKeyword};`) + lastKeyword.length + 1;
+        diagnostics.push({
+            severity: DiagnosticSeverity.Error,
+            range: {
+                start: positionAt(this.index + indexOfFirstKeyword),
+                end: positionAt(this.index + endIndexOfLastKeyword)
+            },
+            message: `A maximum of 6 total keywords is allowed. Found ${baseKeywordsLength} base keywords and ${keywords.length} image-specific keyword${keywords.length == 1 ? "" : "s"}.`,
+            source: 'Markdown Captions'
+        });
+    }
+
+    validateTitle(
+        fullText: string,
+        diagnostics: Diagnostic[],
+        maxNumberOfProblems: number,
+        positionAt: PositionAt,
+    ) {
+        if (diagnostics.length >= maxNumberOfProblems) { return; }
+
+        let indexOfMatch: number;
+        const title = this.title || '';
+
+        const titlePattern = /^(\d{6}-(?:A|F|G|M|N|X)-[A-Z0-9]{5}-\d{4})\\\s*$/g;
+        let match = titlePattern.exec(title);
+        if (match) { return; }
+
+        const missingBackslashPattern = /^(\d{6}-(?:A|F|G|M|N|X)-[A-Z0-9]{5}-\d{4})((?<!\\)\s*)$/g;
+        match = missingBackslashPattern.exec(title);
+        if (match) {
+            indexOfMatch = fullText.indexOf(`\n${match[1]}${match[2]}`) + match[1].length + 1;
+            diagnostics.push({
+                severity: DiagnosticSeverity.Warning,
+                range: {
+                    start: positionAt(this.index + indexOfMatch),
+                    end: positionAt(this.index + indexOfMatch + match[2].length)
+                },
+                message: 'The title should end in a backslash for pandoc and markdown preview to render propper spacing.',
+                source: 'Markdown Captions'
+            });
+            return;
+        }
+
+        indexOfMatch = fullText.indexOf(title);
+        diagnostics.push({
+            severity: DiagnosticSeverity.Error,
+            range: {
+                start: positionAt(this.index + indexOfMatch),
+                end: positionAt(this.index + indexOfMatch + title.length)
+            },
+            message: `Expected image title resembling "yymmdd-X-AB123-0000\\", found "${title}". (X can be any of A, F, G, M, N, or X)`,
+            source: 'Markdown Captions'
+        });
+    }
+
+    build(
+        baseKeywordsLength: number,
+        diagnostics: Diagnostic[],
+        maxNumberOfProblems: number,
+        positionAt: PositionAt,
+    ): Caption | null {
         if (
             !this.imageTag ||
             !this.keywords ||
@@ -319,9 +481,14 @@ class CaptionBuilder {
             return null;
         }
 
+        const fullText = this.lines.join('\n');
+        this.validateImageTag(fullText, diagnostics, maxNumberOfProblems, positionAt);
+        this.validateKeywords(baseKeywordsLength, fullText, diagnostics, maxNumberOfProblems, positionAt);
+        this.validateTitle(fullText, diagnostics, maxNumberOfProblems, positionAt);
+
         return new Caption(
             this.index,
-            this.lines.join('\n'),
+            fullText,
             this.imageTag,
             this.keywords,
             this.title,
@@ -352,149 +519,6 @@ class Caption {
         this.keywords = keywords;
         this.title = title;
         this.description = description;
-    }
-
-    validateImageTag(
-        diagnostics: Diagnostic[],
-        maxNumberOfProblems: number,
-        positionAt: PositionAt,
-    ) {
-        if (diagnostics.length >= maxNumberOfProblems) { return; }
-        let indexOfMatch: number;
-
-        const correctFilenamePattern =
-            /^(!\[\]\(\<.+\/)(\d{6}-(?:A|F|G|M|N|X)-[A-Z0-9]{5}-\d{4})(\.jpg|\.mp4)\>\)\s*$/g;
-        let match = correctFilenamePattern.exec(this.imageTag);
-        if (match) { return; }
-
-        const extraCrapOnTheEndPattern =
-            /^(!\[\]\(\<.+\/)(\d{6}-(?:A|F|G|M|N|X)-[A-Z0-9]{5}-\d{4})(\.jpg|\.mp4)(\>\)\s*)(.+)$/g;
-        match = extraCrapOnTheEndPattern.exec(this.imageTag);
-        if (match) {
-            indexOfMatch = this.fullText.indexOf(`${match[4]}${match[5]}`);
-            diagnostics.push({
-                severity: DiagnosticSeverity.Error,
-                range: {
-                    start: positionAt(this.index + indexOfMatch + match[4].length),
-                    end: positionAt(this.index + indexOfMatch + match[4].length + match[5].length)
-                },
-                message: `Found unexpected characters after image title "${match[5]}".`,
-                source: 'Markdown Captions'
-            });
-            return;
-        }
-
-        const incorrectExtensionPattern =
-            /^(!\[\]\(\<.+\/)(\d{6}-(?:A|F|G|M|N|X)-[A-Z0-9]{5}-\d{4})(.+)\>\)\s*$/g;
-        match = incorrectExtensionPattern.exec(this.imageTag);
-        if (match) {
-            indexOfMatch = this.fullText.indexOf(match[3]);
-            diagnostics.push({
-                severity: DiagnosticSeverity.Warning,
-                range: {
-                    start: positionAt(this.index + indexOfMatch),
-                    end: positionAt(this.index + indexOfMatch + match[3].length)
-                },
-                message: `Expected image tag file extension to be .jpg or .mp4, found "${match[3]}".\nUsage of files with other extensions may result in unexpected outcomes.`,
-                source: 'Markdown Captions'
-            });
-            return;
-        }
-
-        const incorrectFilenamePattern = /^(!\[\]\(\<.+\/)(.+)(\..+)\>\)\s*$/g;
-        match = incorrectFilenamePattern.exec(this.imageTag);
-        if (match) {
-            indexOfMatch = this.fullText.indexOf(match[2]);
-            diagnostics.push({
-                severity: DiagnosticSeverity.Error,
-                range: {
-                    start: positionAt(this.index + indexOfMatch),
-                    end: positionAt(this.index + indexOfMatch + match[2].length)
-                },
-                message: `Expected filename to be of the format "yymmdd-X-AB123-0000", found "${match[2]}". (X can be any of A, F, G, M, N, or X)`,
-                source: 'Markdown Captions'
-            });
-            return;
-        }
-
-        indexOfMatch = this.fullText.indexOf(this.imageTag);
-        diagnostics.push({
-            severity: DiagnosticSeverity.Error,
-            range: {
-                start: positionAt(this.index + indexOfMatch),
-                end: positionAt(this.index + indexOfMatch + this.imageTag.length)
-            },
-            message: `Unexpected error validating image tag.`,
-            source: 'Markdown Captions'
-        });
-    }
-
-    validateKeywords(
-        baseKeywordsLength: number,
-        diagnostics: Diagnostic[],
-        maxNumberOfProblems: number,
-        positionAt: PositionAt,
-    ) {
-        if (diagnostics.length >= maxNumberOfProblems) { return; }
-
-        if (this.keywords.length == 0 || baseKeywordsLength + this.keywords.length <= 6) {
-            return;
-        }
-
-        const indexOfFirstKeyword =
-            this.fullText.indexOf(`${this.keywords[0]};`);
-        const endIndexOfLastKeyword =
-            this.fullText.indexOf(`${this.keywords[this.keywords.length - 1]};`) +
-            this.keywords[this.keywords.length - 1].length + 1;
-        diagnostics.push({
-            severity: DiagnosticSeverity.Error,
-            range: {
-                start: positionAt(this.index + indexOfFirstKeyword),
-                end: positionAt(this.index + endIndexOfLastKeyword)
-            },
-            message: `A maximum of 6 total keywords is allowed. Found ${baseKeywordsLength} base keywords and ${this.keywords.length} image-specific keyword${this.keywords.length == 1 ? "" : "s"}.`,
-            source: 'Markdown Captions'
-        });
-    }
-
-    validateTitle(
-        diagnostics: Diagnostic[],
-        maxNumberOfProblems: number,
-        positionAt: PositionAt,
-    ) {
-        if (diagnostics.length >= maxNumberOfProblems) { return; }
-        let indexOfMatch: number;
-
-        const titlePattern = /^(\d{6}-(?:A|F|G|M|N|X)-[A-Z0-9]{5}-\d{4})\\\s*$/g;
-        let match = titlePattern.exec(this.title);
-        if (match) { return; }
-
-        const missingBackslashPattern = /^(\d{6}-(?:A|F|G|M|N|X)-[A-Z0-9]{5}-\d{4})((?<!\\)\s*)$/g;
-        match = missingBackslashPattern.exec(this.title);
-        if (match) {
-            indexOfMatch = this.fullText.indexOf(`\n${match[1]}${match[2]}`) + match[1].length + 1;
-            diagnostics.push({
-                severity: DiagnosticSeverity.Warning,
-                range: {
-                    start: positionAt(this.index + indexOfMatch),
-                    end: positionAt(this.index + indexOfMatch + match[2].length)
-                },
-                message: 'The title should end in a backslash for pandoc and markdown preview to render propper spacing.',
-                source: 'Markdown Captions'
-            });
-            return;
-        }
-
-        indexOfMatch = this.fullText.indexOf(this.title);
-        diagnostics.push({
-            severity: DiagnosticSeverity.Error,
-            range: {
-                start: positionAt(this.index + indexOfMatch),
-                end: positionAt(this.index + indexOfMatch + this.title.length)
-            },
-            message: `Expected image title resembling "yymmdd-X-AB123-0000\\", found "${this.title}". (X can be any of A, F, G, M, N, or X)`,
-            source: 'Markdown Captions'
-        });
     }
 
     validateFilenamesMatchImageTitles(
@@ -770,12 +794,6 @@ class Caption {
         maxNumberOfProblems: number,
         positionAt: PositionAt,
     ) {
-        const diagnosticsLength = diagnostics.length;
-        this.validateImageTag(diagnostics, maxNumberOfProblems, positionAt);
-        this.validateKeywords(baseKeywordsLength, diagnostics, maxNumberOfProblems, positionAt);
-        this.validateTitle(diagnostics, maxNumberOfProblems, positionAt);
-
-        if (diagnostics.length > diagnosticsLength) { return; }
         this.validateFilenamesMatchImageTitles(diagnostics, maxNumberOfProblems, positionAt);
         this.validateFilenameDateMatchesCaptionDate(diagnostics, maxNumberOfProblems, positionAt);
         this.validateDescriptionEndsWithABackslash(diagnostics, maxNumberOfProblems, positionAt);
@@ -951,7 +969,7 @@ async function validateTextDocument(textDocument: TextDocument): Promise<Diagnos
         }
         captionBuilder.getFieldFromLine(line, diagnostics, maxNumberOfProblems, priorTextLength, positionAt);
         priorTextLength += line.length + 1;
-        caption = captionBuilder.build();
+        caption = captionBuilder.build(baseKeywords.length, diagnostics, maxNumberOfProblems, positionAt);
         if (caption) {
             captions.push(caption);
             captionBuilder = new CaptionBuilder();
