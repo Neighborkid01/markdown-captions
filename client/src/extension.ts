@@ -1,5 +1,5 @@
 import * as path from 'path';
-import { workspace, ExtensionContext } from 'vscode';
+import { commands, workspace, ExtensionContext } from 'vscode';
 
 import {
     LanguageClient,
@@ -11,6 +11,11 @@ import {
 let client: LanguageClient;
 
 export function activate(context: ExtensionContext) {
+    // Registering command created in package.json
+    commands.registerCommand('markdown-captions.showPreviewToSide', () => {
+        commands.executeCommand('markdown.showPreviewToSide').then(function () {});
+    });
+
     // The server is implemented in node
     const serverModule = context.asAbsolutePath(
         path.join('server', 'out', 'server.js')

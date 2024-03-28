@@ -34,12 +34,25 @@
       "extensions": [".md",".mdc",".mdown",".markdown",".markdn"],
       "configuration": "./language-configuration.json"
     }],
+    "commands": [{
+      "command": "markdown-captions.showPreviewToSide",
+      "title": "Show Preview to the Side",
+      "category": "Markdown Captions",
+      "icon": "$(open-preview)"
+    }],
     "keybindings": [{
       "command": "markdown.showPreviewToSide",
       "key": "ctrl+k v",
       "mac": "cmd+k v",
       "when": "!notebookEditorFocused && (editorLangId == 'markdown' || editorLangId == 'Markdown-Captions')"
     }],
+    "menus": {
+      "editor/title": [{
+        "when": "!notebookEditorFocused && editorLangId == 'Markdown-Captions'",
+        "command": "markdown-captions.showPreviewToSide",
+        "group": "navigation"
+      }]
+    },
     "grammars": [{
       "language": "Markdown-Captions",
       "scopeName": "text.html.markdown.captions",
