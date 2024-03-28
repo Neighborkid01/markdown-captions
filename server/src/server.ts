@@ -674,6 +674,32 @@ class Caption {
         });
     }
 
+    validateDescriptionEndsWithAttribution(
+        diagnostics: Diagnostic[],
+        maxNumberOfProblems: number,
+        positionAt: PositionAt,
+    ) {
+        if (diagnostics.length >= maxNumberOfProblems) { return; }
+        let indexOfMatch: number;
+
+        const attributionPattern = /(\(.*(?:[Pp]hoto|[Vv]ideo).*\)\\)$/g;
+        let match = attributionPattern.exec(this.description);
+        if (match) { return; }
+
+        const charsToUnderline = 15
+        indexOfMatch = this.fullText.indexOf(this.description) +
+            this.description.length - charsToUnderline;
+        diagnostics.push({
+            severity: DiagnosticSeverity.Warning,
+            range: {
+                start: positionAt(this.index + indexOfMatch),
+                end: positionAt(this.index + indexOfMatch + charsToUnderline)
+            },
+            message: "The caption is missing attribution. Expected ending resembling (Photo by John Smith)\.",
+            source: 'Markdown Captions'
+        });
+    }
+
     validateNoDoublePunctuation(
         diagnostics: Diagnostic[],
         maxNumberOfProblems: number,
@@ -683,7 +709,7 @@ class Caption {
         let indexOfMatch: number;
         let match: RegExpExecArray | null;
         // Using a character class caused this to falsely identify numbers as punctuation
-        const punctuationPattern = /(?:\.,|,\.|( |;|:|\+|-|=|!|@|#|\$|%|\^|&|\*|\(|\)|<|>|{|}|\[|\]|\\|'|"|\?|\/|`|~)\1{1,})/g;
+        const punctuationPattern = /(?:\.,|,\.|([ -/:-@[-`{-~])\1{1,})/g;
 
         while (match = punctuationPattern.exec(this.description)) {
             indexOfMatch = this.fullText.indexOf(match[0]);
@@ -770,7 +796,7 @@ class Caption {
         let indexOfMatch: number;
         let secondIndexOfMatch: number;
         let match: RegExpExecArray | null;
-        const punctuationPattern = /\((.+?)(?<![Pp]hoto|[Vv]ideo)\)/g;
+        const punctuationPattern = /(\((?!.*?(?:[Pp]hoto|[Vv]ideo)).*?\))/g
 
         while (match = punctuationPattern.exec(this.description)) {
             indexOfMatch = this.fullText.indexOf(match[0]);
@@ -798,6 +824,7 @@ class Caption {
         this.validateFilenameMatchesVirin(diagnostics, maxNumberOfProblems, positionAt);
         this.validateFilenameDateMatchesCaptionDate(diagnostics, maxNumberOfProblems, positionAt);
         this.validateDescriptionEndsWithABackslash(diagnostics, maxNumberOfProblems, positionAt);
+        this.validateDescriptionEndsWithAttribution(diagnostics, maxNumberOfProblems, positionAt);
         this.validateNoDoublePunctuation(diagnostics, maxNumberOfProblems, positionAt);
         this.validateAbbreviationsArePunctuatedCorrectly(diagnostics, maxNumberOfProblems, positionAt);
         this.validateAbbreviationActuallyUsedASecondTime(diagnostics, maxNumberOfProblems, positionAt);
